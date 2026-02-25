@@ -557,7 +557,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',system-ui,sans
   <div class="logo">🌿</div>
   <div>
     <h1>ABACA SCANNER</h1>
-    <p>GrabCut Segmentation · KNN+RF+SVM · Delta-E · CPU Edition</p>
+    <p>GrabCut Segmentation · KNN+SVM · Delta-E · CPU Edition</p>
   </div>
 </div>
 
@@ -777,7 +777,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',system-ui,sans
 
   <div class="arch-badges pad">
     <span class="ab">GrabCut Seg</span>
-    <span class="ab">KNN + RF + SVM</span>
+    <span class="ab">KNN + SVM</span>
     <span class="ab">Delta-E</span>
     <span class="ab">Hybrid Score</span>
   </div>
