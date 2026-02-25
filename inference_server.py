@@ -73,7 +73,7 @@ def load_models():
 
     # Check all required files exist before loading
     required = [
-        "model_knn.joblib", "model_svm.joblib", "model_rf.joblib",
+        "model_knn.joblib", "model_svm.joblib",
         "scaler_knn.joblib", "label_encoder.joblib", "rhs_colors.csv"
     ]
     for fname in required:
@@ -86,7 +86,6 @@ def load_models():
 
     knn        = joblib.load(PIPELINE_DIR / "model_knn.joblib")   # real KNN k=7
     scaler_knn = joblib.load(PIPELINE_DIR / "scaler_knn.joblib")  # KNN needs its own scaler
-    rf         = joblib.load(PIPELINE_DIR / "model_rf.joblib")    # Random Forest
     svm        = joblib.load(PIPELINE_DIR / "model_svm.joblib")   # SVM RBF
     le         = joblib.load(PIPELINE_DIR / "label_encoder.joblib")
 
@@ -102,10 +101,10 @@ def load_models():
                 "B": int(row["B"]),
             }
 
-    print(f"✅ KNN (k=7) + RF (100 trees) + SVM (RBF C=20) loaded")
+    print(f"✅ KNN (k=7) + SVM (RBF C=20) loaded")
     print(f"✅ {len(le.classes_)} RHS classes")
     print(f"✅ {len(colors_db)} colors in database")
-    return knn, scaler_knn, rf, svm, le, colors_db
+    return knn, scaler_knn, svm, le, colors_db
 
 
 # ── Color math ─────────────────────────────────────────────────────────────────
@@ -181,22 +180,21 @@ def de_label(de: float) -> tuple:
 
 
 # ── KNN + SVM ensemble ─────────────────────────────────────────────────────────
-def ensemble_predict(feat, knn, scaler_knn, rf, svm, le, n_top=15):
+def ensemble_predict(feat, knn, scaler_knn, svm, le, n_top=15):
     """
-    True 3-model ensemble: KNN + RF + SVM.
+    2-model ensemble: KNN + SVM (RF removed to reduce memory usage).
     KNN needs its own scaler (scaler_knn) — it was trained on scaled features.
-    RF uses raw features (tree-based, scale-invariant).
     SVM uses its internal scaler (built into the Pipeline).
-    Weights: KNN=0.25, RF=0.35, SVM=0.40
+    Weights: KNN=0.40, SVM=0.60
+    Delta-E still handles 85% of final score — ML impact unchanged.
     """
     f_raw    = feat.reshape(1, -1)
     f_scaled = scaler_knn.transform(f_raw)  # KNN needs scaled input
 
     knn_proba = knn.predict_proba(f_scaled)[0]   # real KNN k=7
-    rf_proba  = rf.predict_proba(f_raw)[0]        # RF uses raw features
     svm_proba = svm.predict_proba(f_raw)[0]       # SVM Pipeline has internal scaler
 
-    combined = 0.25 * knn_proba + 0.35 * rf_proba + 0.40 * svm_proba
+    combined = 0.40 * knn_proba + 0.60 * svm_proba
     top_idx  = np.argsort(combined)[::-1][:n_top]
     return le.inverse_transform(top_idx), combined[top_idx]
 
@@ -243,7 +241,7 @@ def hybrid_score(ml_codes, ml_probs, dL, da, db, colors_db, de_cands):
 
 
 # ── Full prediction pipeline ───────────────────────────────────────────────────
-def predict(img: Image.Image, knn, scaler_knn, rf, svm, le, colors_db):
+def predict(img: Image.Image, knn, scaler_knn, svm, le, colors_db):
     # 1. GrabCut segmentation — isolate fiber pixels
     try:
         from segment import segment_fiber
@@ -285,7 +283,7 @@ def predict(img: Image.Image, knn, scaler_knn, rf, svm, le, colors_db):
 
     # 4. Feature extraction + KNN/SVM ensemble
     feat                    = extract_features(wb_img)
-    ml_codes, ml_probs      = ensemble_predict(feat, knn, scaler_knn, rf, svm, le, n_top=15)
+    ml_codes, ml_probs      = ensemble_predict(feat, knn, scaler_knn, svm, le, n_top=15)
 
     # 5. Pure Delta-E candidates
     de_cands = deltae_match(dom_L, dom_a, dom_b_val, colors_db, n=10)
@@ -1452,7 +1450,7 @@ function resetUI(){
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 class Handler(BaseHTTPRequestHandler):
-    knn = scaler_knn = rf = svm = le = colors_db = None
+    knn = scaler_knn = svm = le = colors_db = None
 
     def log_message(self, fmt, *args):
         print(f"  [{self.address_string()}] {fmt % args}")
@@ -1535,7 +1533,7 @@ class Handler(BaseHTTPRequestHandler):
                 })
                 return
 
-            result = predict(img, Handler.knn, Handler.scaler_knn, Handler.rf,
+            result = predict(img, Handler.knn, Handler.scaler_knn,
                              Handler.svm, Handler.le, Handler.colors_db)
             self._json(result)
         except Exception as ex:
@@ -1566,7 +1564,7 @@ def main():
     print(f"\n🌿 Abaca Scanner — CPU Edition")
     print(f"   GrabCut Segmentation + KNN/SVM + Delta-E\n")
     print("Loading models...")
-    Handler.knn, Handler.scaler_knn, Handler.rf, Handler.svm, Handler.le, Handler.colors_db = load_models()
+    Handler.knn, Handler.scaler_knn, Handler.svm, Handler.le, Handler.colors_db = load_models()
     ip = get_local_ip()
     print(f"\n🚀 Ready!")
     print(f"   PC    → http://localhost:{PORT}")
