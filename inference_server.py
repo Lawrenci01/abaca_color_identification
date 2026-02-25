@@ -1470,7 +1470,8 @@ class Handler(BaseHTTPRequestHandler):
         if self.path != '/predict':
             self.send_response(404); self.end_headers(); return
 
-        # ── Rate limit check ───────────────────────────────────────────────
+        if Handler.knn is None:
+            self._json({'error': 'Server is still loading models, please wait 10-20 seconds and try again.'}); return
         client_ip = self.address_string()
         if not _check_rate_limit(client_ip):
             self._json({
@@ -1559,18 +1560,31 @@ def get_local_ip():
 
 def main():
     import os
+    import threading
     HOST = '0.0.0.0'
     PORT = int(os.environ.get('PORT', 5050))  # Render sets PORT automatically
     print(f"\n🌿 Abaca Scanner — CPU Edition")
     print(f"   GrabCut Segmentation + KNN/SVM + Delta-E\n")
-    print("Loading models...")
-    Handler.knn, Handler.scaler_knn, Handler.svm, Handler.le, Handler.colors_db = load_models()
-    ip = get_local_ip()
-    print(f"\n🚀 Ready!")
-    print(f"   PC    → http://localhost:{PORT}")
-    print(f"   Phone → http://{ip}:{PORT}")
-    print(f"\n   Ctrl+C to stop\n")
+
+    # Start server immediately so Render detects the port
     server = HTTPServer((HOST, PORT), Handler)
+    print(f"🚀 Server bound to port {PORT} — loading models...")
+
+    # Load models in background thread
+    def load_in_background():
+        try:
+            Handler.knn, Handler.scaler_knn, Handler.svm, Handler.le, Handler.colors_db = load_models()
+            ip = get_local_ip()
+            print(f"\n✅ Models ready!")
+            print(f"   PC    → http://localhost:{PORT}")
+            print(f"   Phone → http://{ip}:{PORT}")
+            print(f"\n   Ctrl+C to stop\n")
+        except Exception as e:
+            print(f"\n❌ Model loading failed: {e}")
+
+    t = threading.Thread(target=load_in_background, daemon=True)
+    t.start()
+
     try:    server.serve_forever()
     except KeyboardInterrupt: print("\nStopped.")
 
