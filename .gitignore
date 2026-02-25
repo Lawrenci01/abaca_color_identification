@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+*.pyo
+abaca_pipeline/augmented/
+abaca_pipeline/report/
+abaca_pipeline/augmented_manifest.csv
+abaca_pipeline/model_regressor.joblib
+abaca_pipeline/scaler.joblib
+augment_dataset.py
+extract_colors.py
+train_model.py
+.env
+.DS_Store
+Thumbs.db
+*.log

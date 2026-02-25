@@ -1,0 +1,7 @@
+numpy==1.26.4
+Pillow==10.3.0
+joblib==1.4.2
+scikit-learn==1.4.2
+scikit-image==0.23.2
+opencv-python-headless==4.9.0.80
+scipy==1.13.0

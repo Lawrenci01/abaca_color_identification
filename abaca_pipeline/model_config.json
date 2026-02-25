@@ -1,0 +1,19 @@
+{
+  "feature_size": 165,
+  "swatch_size": 64,
+  "model_type": "KNN+RF+SVM_ensemble",
+  "n_classes": 420,
+  "ensemble_weights": {
+    "knn": 0.25,
+    "rf": 0.35,
+    "svm": 0.4
+  },
+  "knn_neighbors": 7,
+  "improvements": [
+    "32-bin histograms",
+    "Gabor texture",
+    "Delta-E normalization",
+    "SVM C=20",
+    "Real KNN k=7 distance-weighted"
+  ]
+}
