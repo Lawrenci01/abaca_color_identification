@@ -1,0 +1,73 @@
+==================================================================
+  ABACA FIBER COLOR IDENTIFICATION — EVALUATION REPORT
+  Ensemble: MLP-A(0.28) + MLP-B(0.27) + MLP-C(0.22) + MLP-D(0.23)
+  Features: 248 dims  |  Classes: 876
+==================================================================
+
+DATASET SUMMARY
+  Test images evaluated  : 8760
+  Unique RHS classes     : 876
+  Feature size           : 248 per image
+
+==================================================================
+ACCURACY
+==================================================================
+  MLP-A (individual)     : 90.84%
+  MLP-B (individual)     : 90.54%
+  MLP-C (individual)     : 89.83%
+  MLP-D (individual)     : 89.19%
+  Ensemble (A+B+C+D)     : 93.82%
+  Top-3 Accuracy         : 99.27%
+  Top-5 Accuracy         : 99.66%
+  Target                 : 89.00%
+  Gap to target          : 0.00%
+
+==================================================================
+CLASSIFICATION METRICS  (macro-averaged across all 876 classes)
+==================================================================
+  Precision              : 0.9415  (94.15%)
+  Recall                 : 0.9382  (93.82%)
+  F1 Score               : 0.9374  (93.74%)
+
+==================================================================
+DELTA-E  (perceptual color distance, lower = better)
+==================================================================
+  Mean  dE  (all)        : 0.25
+  Median dE (all)        : 0.00
+  Mean  dE  (wrong only) : 3.98
+  Median dE (wrong only) : 2.08
+  Max   dE               : 30.96
+
+  Within dE <  5  (imperceptible) : 97.9%
+  Within dE < 10  (very close)    : 99.3%
+  Within dE < 20  (acceptable)    : 99.9%
+
+==================================================================
+TOP 15 MOST COMMON MISCLASSIFICATIONS
+==================================================================
+  True: PURPLE_N77C          Predicted: PURPLE_77C           Count:   9   dE: 0.0
+  True: ORANGERED_34C        Predicted: ORANGERED_N34C       Count:   8   dE: 0.0
+  True: ORANGE_25A           Predicted: ORANGE_N25A          Count:   8   dE: 0.0
+  True: ORANGE_25D           Predicted: ORANGE_N25D          Count:   8   dE: 0.0
+  True: PURPLE_77B           Predicted: PURPLE_N77B          Count:   8   dE: 0.0
+  True: BLUEGREEN_111C       Predicted: BLUEGREEN_111B       Count:   7   dE: 0.3
+  True: ORANGERED_N34D       Predicted: ORANGERED_34D        Count:   7   dE: 0.0
+  True: ORANGE_30D           Predicted: ORANGE_N30D          Count:   7   dE: 0.0
+  True: ORANGE_N25C          Predicted: ORANGE_25C           Count:   7   dE: 0.0
+  True: PURPLE_79A           Predicted: PURPLE_N79A          Count:   7   dE: 0.0
+  True: BLUEGREEN_114C       Predicted: BLUEGREEN_114D       Count:   6   dE: 0.0
+  True: ORANGERED_34A        Predicted: ORANGERED_N34A       Count:   6   dE: 0.0
+  True: ORANGERED_34B        Predicted: ORANGERED_N34B       Count:   6   dE: 0.0
+  True: ORANGE_N25B          Predicted: ORANGE_25B           Count:   6   dE: 0.0
+  True: ORANGE_N30A          Predicted: ORANGE_30A           Count:   6   dE: 0.0
+
+==================================================================
+OUTPUT FILES  (all saved to report/)
+==================================================================
+  evaluation_report.txt
+  confusion_matrix.png
+  delta_e_distribution.png
+  model_comparison.png
+  color_comparison_grid.png
+  per_class_metrics.csv
+==================================================================
