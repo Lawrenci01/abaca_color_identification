@@ -1,0 +1,42 @@
+<div id="screen-dashboard" class="screen active">
+        <div class="dash-header">
+            <div class="dash-greeting" id="dash-greeting">Good morning <span>🌿</span></div>
+            <div class="dash-sub" id="dash-date">Loading...</div>
+        </div>
+        <div class="summary-card">
+            <div class="summary-label">📊 Summary</div>
+            <div class="summary-grid">
+                <div class="sum-item">
+                    <div class="sum-num" id="stat-today">—</div>
+                    <div class="sum-lbl">Today</div>
+                </div>
+                <div class="sum-item">
+                    <div class="sum-num" id="stat-total">—</div>
+                    <div class="sum-lbl">Total</div>
+                </div>
+                <div class="sum-item">
+                    <div class="sum-num" id="stat-avgde">—</div>
+                    <div class="sum-lbl">Avg ΔE</div>
+                </div>
+            </div>
+        </div>
+        <div class="avg-grade-banner">
+            <div class="agb-left">
+                <div class="agb-lbl">Average Grade</div>
+                <div class="agb-val" id="stat-topgrade">—</div>
+            </div>
+            <div class="agb-right" id="stat-verified-pct">—% verified</div>
+        </div>
+        <button class="start-scan-btn" onclick="goToScanner()">📷 START SCAN</button>
+        <div class="recent-header">
+            <div class="recent-title">🕐 Recent Activity</div>
+            <div class="see-all" onclick="goToHistory()">See all →</div>
+        </div>
+        <div class="card" style="margin:0 16px;">
+            <div id="recent-list">
+                <div class="dash-empty">Loading...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SCANNER -->

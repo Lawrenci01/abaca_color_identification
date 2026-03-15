@@ -1,15 +1,35 @@
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
 *.pyo
+venv/
+env/
+.venv/
+.idea/
+.vscode/
+
+# Large training data — never commit
 abaca_pipeline/augmented/
-abaca_pipeline/report/
-abaca_pipeline/augmented_manifest.csv
-abaca_pipeline/model_regressor.joblib
-abaca_pipeline/scaler.joblib
-augment_dataset.py
-extract_colors.py
-train_model.py
-.env
+abaca_pipeline/features_cache.npy
+abaca_pipeline/labels_cache.joblib
+swatches/
+swatches_real/
+real_photos/
+
+# Models — stored in HF, not GitHub
+*.joblib
+*.npy
+*.pkl
+abaca_pipeline/backup/
+
+# Misc large files
+RHS-COLOR-TRUNCATED.pdf
+NLkOHFbH.jpeg
+rhs_swatch_data.csv
+
+# OS
 .DS_Store
 Thumbs.db
+logs/
 *.log
+report/*.png

@@ -1,136 +1,69 @@
-# 🌿 Abaca Color Scanner — CPU Edition
+﻿# Abaca Color Scanner (v2)
 
-Scan abaca fiber and match it to the closest RHS (Royal Horticultural Society) color code using GrabCut segmentation, a KNN+RF+SVM ensemble, and Delta-E color distance.
+An AI-powered system for grading abaca fiber color using the RHS (Royal Horticultural Society) color standard. This project employs a hybrid approach combining Computer Vision (CV) and Machine Learning (ML) to achieve high accuracy (90%+) in predicting RHS color codes (876 classes).
 
----
+## 🚀 Key Features
+- **Quad MLP Ensemble**: A combination of four diverse Multi-Layer Perceptron architectures to robustly classify fiber features.
+- **Hybrid Scoring**: Uses a weighted combination of Delta-E color distance (75%) and MLP ensemble probabilities (25%) for final grading.
+- **Foreground Extraction**: Intelligent segmentation using Otsu thresholding and morphological cleanup to isolate fiber from the scanner background.
+- **Data Augmentation**: Robust pipeline generating ~870,000 augmented images to handle various lighting and texture conditions.
+- **Real-time Serving**: Flask-based API with hot-reloading capabilities for model updates.
+- **Cloud Integration**: Supabase integration for scan history, user management, and verified data collection.
 
-## Project Structure
+## 🛠 Tech Stack
+- **Languages**: Python 3.10+
+- **ML Frameworks**: scikit-learn
+- **Image Processing**: OpenCV, Pillow, scikit-image
+- **Database**: Supabase
+- **Deployment**: Docker, Hugging Face Spaces
 
-```
-abaca_color_ai/
-├── inference_server.py     # Main web server + UI
-├── segment.py              # GrabCut fiber segmentation
-├── features.py             # Shared 165-feature extraction
-├── run_pipeline.py         # Train models from labeled images
-├── evaluate.py             # Evaluate models + confusion matrix
-├── requirements.txt        # Python dependencies
-├── render.yaml             # Render deployment config
-├── .gitignore
-└── abaca_pipeline/
-    ├── model_knn.joblib        # Trained KNN model (k=7)
-    ├── model_rf.joblib         # Trained Random Forest (100 trees)
-    ├── model_svm.joblib        # Trained SVM (RBF kernel, C=20)
-    ├── scaler_knn.joblib       # Feature scaler for KNN
-    ├── label_encoder.joblib    # RHS code label encoder
-    └── rhs_colors.csv          # 420 RHS color Lab/RGB values
-```
+## 📂 Project Structure
+- `app.py`: Main Flask application and API.
+- `features.py`: Core feature extraction (248-dim) and prediction logic.
+- `train_model.py`: Training script for the Quad MLP ensemble.
+- `evaluate.py`: Model evaluation and reporting.
+- `build_rhs_csv.py`: Extracts reference colors from real photos of RHS cards.
+- `process_real_photos.py`: Extracts texture swatches for training data.
+- `augment_dataset.py`: Generates the augmented training dataset.
+- `segment.py`: Fiber segmentation logic.
+- `db.py`: Supabase database interface.
+- `run_pipeline.py`: Orchestrator for the entire development/training lifecycle.
 
----
+## 🏁 Getting Started
 
-## How It Works
-
-### Pipeline (per scan)
-```
-Photo → GrabCut segmentation → White balance → Dominant color
-      → 165-feature extraction → KNN+RF+SVM (15% weight)
-      → Delta-E vs 420 RHS colors (85% weight)
-      → Hybrid score → Top 5 RHS matches
-```
-
-### Feature Vector (165 dimensions)
-- `[3]`  Mean Lab color (perceptual)
-- `[3]`  Std RGB (texture roughness)
-- `[12]` Lab per quadrant (spatial layout)
-- `[96]` RGB histograms 32 bins × 3
-- `[32]` HSV histograms 16H + 8S + 8V
-- `[10]` LBP texture (micro-texture)
-- `[8]`  Gabor texture (fiber direction)
-- `[1]`  Delta-E std deviation (color consistency)
-
-### Model Weights
-| Model | Weight | Notes |
-|-------|--------|-------|
-| KNN (k=7) | 25% | Needs scaled features |
-| RF (100 trees) | 35% | Scale-invariant |
-| SVM (RBF C=20) | 40% | Internal scaler in pipeline |
-| Delta-E | 85% of final | Overrides ML until retrained on abaca |
-
----
-
-## Running Locally
-
+### 1. Installation
 ```bash
 pip install -r requirements.txt
-python inference_server.py
 ```
 
-Open: http://localhost:5050
-
----
-
-## Training Models (requires labeled images)
-
-Organize images into folders named by RHS code:
-```
-training_data/
-  59A/
-    photo1.jpg
-    photo2.jpg
-  60B/
-    photo3.jpg
-  ...
-```
-
-Then run:
+### 2. Training the Pipeline
+You can run the entire pipeline from color extraction to evaluation using the orchestrator:
 ```bash
-python run_pipeline.py --train --data training_data/
+python run_pipeline.py --all
 ```
+This will:
+1. Build the RHS color reference (`build_rhs_csv.py`).
+2. Extract texture swatches (`process_real_photos.py`).
+3. Augment the dataset (`augment_dataset.py`).
+4. Train the Quad MLP ensemble (`train_model.py`).
+5. Evaluate the results and generate a report (`evaluate.py`).
 
----
-
-## Evaluating Models (confusion matrix)
-
+### 3. Running the App
 ```bash
-python evaluate.py --data test_data/
+python app.py
+```
+The app will be available at `http://localhost:7860`.
+
+## 🧠 Architecture Details
+- **Feature Vector (248-dim)**: Includes Lab/RGB/HSV histograms, color moments, LBP (Local Binary Patterns), Gabor filters, and spatial Lab regions.
+- **Ensemble Weights**: `[0.28, 0.27, 0.22, 0.23]` for models A, B, C, and D respectively.
+- **Calibrated Scoring**: Match scores are calibrated using an exponential decay function based on Delta-E, where `dE < 3` is a "Strong Match".
+
+## ☁️ Deployment
+The project is configured for deployment to Hugging Face Spaces via Docker:
+```bash
+python deploy_to_hf.py --token <YOUR_HF_TOKEN>
 ```
 
-Outputs:
-- Confusion matrix (PNG)
-- Per-class accuracy
-- Overall top-1 and top-3 accuracy
-
----
-
-## Deploying to Render
-
-1. Push to GitHub
-2. Go to [render.com](https://render.com) → New Web Service
-3. Connect your GitHub repo
-4. Render auto-detects `render.yaml` and deploys
-
-**Important:** The `abaca_pipeline/` model files must be included in your repo (or use Render's persistent disk). Models are required at startup.
-
----
-
-## Box Placement Tips for Accurate Scans
-
-| ✅ Do | ❌ Don't |
-|-------|---------|
-| Cover flat fiber surface | Include punch-hole |
-| Use soft natural light | Scan glare/shine |
-| Box > 10% of image | Box < 10% of image |
-| Plain background | Hands / labels in box |
-| 🌿 Fiber bar > 50% | Submit when fiber bar is red |
-
----
-
-## Delta-E Interpretation
-
-| ΔE | Meaning |
-|----|---------|
-| < 1.0 | Imperceptible |
-| < 2.0 | Very close |
-| < 3.5 | Close match |
-| < 5.0 | Moderate difference |
-| < 10.0 | Noticeable difference |
-| ≥ 10.0 | Very different |
+## ⚖️ License
+MIT License

@@ -1,0 +1,276 @@
+<div id="screen-scanner" class="screen">
+        <div id="scanner-guide">
+            <div class="scanner-header">
+                <div class="scanner-title">📷 Live Scanner</div>
+                <div class="live-chip">
+                    <div class="live-dot"></div>
+                    READY
+                </div>
+            </div>
+            <div style="display:flex;gap:8px;padding:0 0 14px;">
+                <button class="btn primary full" onclick="openCamera()">📷 Take Photo</button>
+                <button class="btn full" onclick="document.getElementById('file-upload').click()">🖼 Upload</button>
+            </div>
+            <div class="guide-card-s">
+                <div class="guide-title-s">⚡ Quick Tips</div>
+                <div class="guide-steps-s">
+                    <div class="gs-s">
+                        <div class="gs-num-s">1</div>
+                        <div class="gs-text-s"><strong>Distance:</strong> Hold phone <em>15–25 cm</em> from fiber</div>
+                    </div>
+                    <div class="gs-s">
+                        <div class="gs-num-s">2</div>
+                        <div class="gs-text-s"><strong>Lighting:</strong> <em>Soft natural daylight</em> only</div>
+                    </div>
+                    <div class="gs-s">
+                        <div class="gs-num-s">3</div>
+                        <div class="gs-text-s"><strong>Background:</strong> Plain <em>white or gray</em> surface</div>
+                    </div>
+                    <div class="gs-s">
+                        <div class="gs-num-s">4</div>
+                        <div class="gs-text-s"><strong>Frame:</strong> <em>Cover fiber only</em> — no hands, no glare
+                        </div>
+                    </div>
+                </div>
+                <div class="do-dont-s">
+                    <div class="dds do">
+                        <div class="dds-title">✅ Do</div>
+                        <div class="dds-item">☀️ Natural light</div>
+                        <div class="dds-item">📐 Box on fiber</div>
+                        <div class="dds-item">🖼 White/gray BG</div>
+                        <div class="dds-item">📏 15–25 cm away</div>
+                    </div>
+                    <div class="dds dont">
+                        <div class="dds-title">❌ Don't</div>
+                        <div class="dds-item">💡 Yellow bulbs</div>
+                        <div class="dds-item">✋ Hands in box</div>
+                        <div class="dds-item">⚫ Punch-hole</div>
+                        <div class="dds-item">✨ Glare/shine</div>
+                    </div>
+                </div>
+            </div>
+            <input type="file" id="file-cam" accept="image/*" capture="environment" onchange="handleImage(this)"
+                   style="display:none;">
+            <input type="file" id="file-upload" accept="image/*" onchange="handleImage(this)" style="display:none;">
+        </div>
+
+        <div id="scanner-preview" style="display:none;">
+            <div style="padding:0 16px 8px;">
+                <div class="preview-wrap" id="preview-wrap">
+                    <img id="preview" alt="" draggable="false">
+                    <div class="zoom-indicator" id="zoom-indicator">1x</div>
+                    <div id="focus-box">
+                        <div class="corner tl" data-corner="tl"></div>
+                        <div class="corner tr" data-corner="tr"></div>
+                        <div class="corner bl" data-corner="bl"></div>
+                        <div class="corner br" data-corner="br"></div>
+                        <div class="edge et" data-corner="et"></div>
+                        <div class="edge eb" data-corner="eb"></div>
+                        <div class="edge el" data-corner="el"></div>
+                        <div class="edge er" data-corner="er"></div>
+                        <div id="focus-dot"></div>
+                    </div>
+                    <div id="live-bar">
+                        <div id="live-sw"></div>
+                        <span id="live-hex">#——</span>
+                        <span id="live-hint">Live avg · avoid hole &amp; glare</span>
+                    </div>
+                </div>
+            </div>
+            <div class="color-info-row">
+                <div class="color-swatch-big" id="color-swatch-big"></div>
+                <div class="color-values" style="flex:1;">
+                    <div class="color-rgb" id="color-rgb-display">RGB — — —</div>
+                    <div class="color-lab" id="color-lab-display">L* — a* — b* —</div>
+                </div>
+                <div>
+                    <div style="font-size:.62rem;color:var(--sub);margin-bottom:3px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;">
+                        Color Chart
+                    </div>
+                    <div class="chart-value" id="live-chart-match">—</div>
+                </div>
+            </div>
+            <div class="quality-strip">
+                <div class="live-crop-wrap" id="live-crop-wrap">
+                    <canvas id="live-crop-thumb" width="54" height="54"></canvas>
+                    <div class="live-crop-info">
+                        <div class="live-crop-label">Live Crop Preview</div>
+                        <div class="live-crop-dims" id="live-crop-dims">—</div>
+                        <div class="live-crop-warn" id="live-crop-warn"></div>
+                    </div>
+                </div>
+                <div class="q-row">
+                    <div class="q-icon" id="qi-bright">☀️</div>
+                    <div class="q-bar-wrap">
+                        <div class="q-bar" id="qb-bright"></div>
+                    </div>
+                    <div class="q-val" id="qv-bright">—</div>
+                </div>
+                <div class="q-row">
+                    <div class="q-icon" id="qi-sharp">🔍</div>
+                    <div class="q-bar-wrap">
+                        <div class="q-bar" id="qb-sharp"></div>
+                    </div>
+                    <div class="q-val" id="qv-sharp">—</div>
+                </div>
+                <div class="q-row">
+                    <div class="q-icon" id="qi-size">📐</div>
+                    <div class="q-bar-wrap">
+                        <div class="q-bar" id="qb-size"></div>
+                    </div>
+                    <div class="q-val" id="qv-size">—</div>
+                </div>
+            </div>
+            <div id="crop-section-s">
+                <div class="crop-title-s">✂️ Confirm Crop Region</div>
+                <div class="crop-sub-s">Region → Otsu Segment → Quad MLP → ΔE</div>
+                <div class="crop-pw-s">
+                    <canvas id="crop-canvas-s"></canvas>
+                </div>
+                <div class="crop-stats-s">
+                    <div class="cs-s">
+                        <div class="csv-s" id="cs-w">—</div>
+                        <div class="csl-s">Width px</div>
+                    </div>
+                    <div class="cs-s">
+                        <div class="csv-s" id="cs-h">—</div>
+                        <div class="csl-s">Height px</div>
+                    </div>
+                    <div class="cs-s">
+                        <div class="csv-s" id="cs-pct">—</div>
+                        <div class="csl-s">% of image</div>
+                    </div>
+                </div>
+                <div class="btn-row">
+                    <button class="btn" onclick="hideCropS()">🔙 Re-adjust</button>
+                    <button class="btn primary" onclick="checkThenSubmit()">🔍 Analyze</button>
+                </div>
+            </div>
+            <div style="padding:2px 16px 0;font-size:.62rem;color:var(--sub);text-align:center;">
+                💡 Drag corners to resize · Drag inside to move · <strong>Long-press</strong> anywhere to jump box
+            </div>
+            <div id="scanner-action-bar" style="padding:8px 16px;display:flex;gap:8px;">
+                <button class="btn" onclick="resetScanner()" style="flex:0 0 auto;padding:10px 14px;">↩ Reset</button>
+                <button class="btn primary" id="crop-btn-s" onclick="showCropS()" style="flex:1;">✂️ Crop &amp; Analyze</button>
+            </div>
+        </div>
+
+        <div id="scanner-spinner">
+            <div class="ring"></div>
+            <div class="spin-text">Analyzing fiber…</div>
+            <div class="spin-step" id="spin-step">Segmenting fiber…</div>
+        </div>
+
+        <div id="scan-result-panel" style="display:none;">
+            <div class="scan-result-panel">
+                <div class="session-info-banner" id="result-session-banner">
+                    <div class="sib-item">
+                        <div class="sib-icon">👤</div>
+                        <div class="sib-val" id="sib-grader">—</div>
+                    </div>
+                    <div class="sib-sep"></div>
+                    <div class="sib-item">
+                        <div class="sib-icon">📍</div>
+                        <div class="sib-val" id="sib-location">—</div>
+                    </div>
+                </div>
+                <div class="result-match-row">
+                    <div class="result-swatch-pair">
+                        <div class="rsw" id="res-swatch-scan"></div>
+                        <div class="rsw-vs">vs</div>
+                        <div class="rsw" id="res-swatch-ref"></div>
+                    </div>
+                    <div style="flex:1;">
+                        <div class="result-code-big" id="res-rhs-code">—</div>
+                        <div class="result-verdict-chip" id="res-verdict">—</div>
+                    </div>
+                    <div style="text-align:right;">
+                        <div style="font-size:.62rem;color:var(--sub);text-transform:uppercase;letter-spacing:.07em;">
+                            Delta-E
+                        </div>
+                        <div style="font-family:'IBM Plex Mono',monospace;font-size:1.2rem;font-weight:700;color:var(--text);"
+                             id="res-de">—
+                        </div>
+                    </div>
+                </div>
+                <div class="result-metrics-row">
+                    <div class="rmc">
+                        <div class="rmc-lbl">Match Score</div>
+                        <div class="rmc-val" id="res-score">—</div>
+                    </div>
+                    <div class="rmc">
+                        <div class="rmc-lbl">Fiber Color</div>
+                        <div class="rmc-val" id="res-hex" style="font-size:.82rem;">—</div>
+                    </div>
+                </div>
+                <div style="font-size:.62rem;color:var(--sub);font-weight:700;text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px;">
+                    ✅ Verification
+                </div>
+                <div class="verify-row" id="verify-row">
+                    <div class="verify-chip" id="vchip-ok" onclick="setVerify(true)">✅ Correct</div>
+                    <div class="verify-chip" id="vchip-no" onclick="setVerify(false)">❌ Wrong</div>
+                </div>
+                <div id="correction-row" style="display:none;margin-bottom:8px;">
+                    <input type="text" id="correction-input" placeholder="Correct RHS code (e.g. 59A)"
+                           style="width:100%;background:var(--card2);border:1px solid var(--border);border-radius:7px;padding:8px 12px;color:var(--text);font-size:.85rem;font-family:'IBM Plex Mono',monospace;text-transform:uppercase;outline:none;">
+                </div>
+                <div style="font-size:.62rem;color:var(--sub);font-weight:700;text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px;">
+                    📋 Metadata (optional)
+                </div>
+                <div class="meta-fields">
+                    <div class="meta-field"><label>Batch ID</label><input type="text" id="meta-batch"
+                                                                          placeholder="e.g. BATCH-001"></div>
+                    <div class="meta-field full-width"><label>Grader Notes</label><textarea id="meta-notes"
+                                                                                            placeholder="Any notes about this scan..."></textarea>
+                    </div>
+                </div>
+                <div class="btn-row">
+                    <button class="btn danger" onclick="resetScanner()">Reset</button>
+                    <button class="btn primary" onclick="saveScan()" style="flex:2;">💾 Verify &amp; Save</button>
+                </div>
+                <div id="save-status"
+                     style="display:none;font-size:.75rem;color:var(--accent);text-align:center;margin-top:8px;"></div>
+            </div>
+            <div style="padding:0 16px 16px;">
+                <div style="font-size:.62rem;color:var(--sub);font-weight:700;text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px;">
+                    🏆 Top 5 RHS Matches
+                </div>
+                <div style="font-size:.62rem;color:var(--sub);margin-bottom:8px;">Tap any grade to select it as
+                    correct
+                </div>
+                <div id="top5-list-s"></div>
+            </div>
+        </div>
+
+        <div id="cam-overlay" class="cam-overlay">
+            <video id="cam-video" autoplay playsinline muted></video>
+            <div class="cam-status-bar">
+                <span id="cam-steady" class="cam-steady">📷 Aim at fiber</span>
+                <span id="cam-res" style="font-size:.65rem;color:rgba(255,255,255,.5);"></span>
+            </div>
+            <div class="cam-guide-frame">
+                <div class="cam-guide-corners"><span></span><span></span></div>
+                <div class="cam-guide-label">Place fiber inside frame</div>
+            </div>
+            <div class="cam-btns-wrap">
+                <button onclick="closeCamera()" class="btn" style="padding:12px 20px;flex:0 0 auto;">✕ Cancel</button>
+                <button onclick="snapPhoto()" class="btn primary" style="padding:12px 32px;flex:1;font-size:1rem;">📸
+                    Capture
+                </button>
+            </div>
+            <canvas id="cam-canvas" style="display:none;"></canvas>
+        </div>
+
+        <div id="quality-modal">
+            <div class="qm">
+                <div class="qm-title">⚠️ Quality Warning</div>
+                <div class="qm-body" id="qm-body">Issues detected.</div>
+                <div class="btn-row">
+                    <button class="btn" onclick="closeModal()">🔙 Go back</button>
+                    <button class="btn danger" onclick="forceSubmit()">⚡ Analyze anyway</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- HISTORY -->

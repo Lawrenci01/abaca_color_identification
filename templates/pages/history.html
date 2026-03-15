@@ -1,0 +1,63 @@
+<div id="screen-history" class="screen">
+        <div class="history-search">
+            <div class="search-wrap">
+                <div class="search-icon">🔍</div>
+                <input type="text" id="history-search-input" placeholder="Search by grade, batch, location…"
+                       oninput="searchHistory(this.value)">
+            </div>
+        </div>
+        <div class="filter-bar" id="filter-bar">
+            <div class="filter-pill active" id="fp-all" onclick="setStatusFilter('all')">All</div>
+            <div class="filter-pill" id="fp-verified" onclick="setStatusFilter('verified')">✅ Verified</div>
+            <div class="filter-pill" id="fp-pending" onclick="setStatusFilter('pending')">⏳ Pending</div>
+            <div class="filter-sep"></div>
+            <div class="filter-dropdown-wrap" id="fdw-rhs">
+                <div class="filter-pill" id="fp-rhs" onclick="toggleDropdown('rhs')">🎨 RHS ▾</div>
+                <div class="filter-dropdown" id="fdd-rhs">
+                    <div class="fdd-item" onclick="setRhsFilter('')">All Grades</div>
+                </div>
+            </div>
+            <div class="filter-dropdown-wrap" id="fdw-loc">
+                <div class="filter-pill" id="fp-loc" onclick="toggleDropdown('loc')">📍 Location ▾</div>
+                <div class="filter-dropdown" id="fdd-loc">
+                    <div class="fdd-item" onclick="setLocFilter('')">All Locations</div>
+                </div>
+            </div>
+            <div class="filter-dropdown-wrap" id="fdw-grader">
+                <div class="filter-pill" id="fp-grader" onclick="toggleDropdown('grader')">👤 Grader ▾</div>
+                <div class="filter-dropdown" id="fdd-grader">
+                    <div class="fdd-item" onclick="setGraderFilter('')">All Graders</div>
+                </div>
+            </div>
+            <div class="filter-count-chip" id="filter-count-chip">— results</div>
+        </div>
+        <div class="active-filter-banner" id="active-filter-banner">
+            <span id="active-filter-text">Filtered</span>
+            <span class="afb-clear" onclick="clearAllFilters()">✕ Clear all</span>
+        </div>
+        <div class="hist-stats-row">
+            <div class="hstat">
+                <div class="hstat-num" id="hs-total">—</div>
+                <div class="hstat-lbl">Total</div>
+            </div>
+            <div class="hstat">
+                <div class="hstat-num" id="hs-today">—</div>
+                <div class="hstat-lbl">Today</div>
+            </div>
+            <div class="hstat">
+                <div class="hstat-num" id="hs-verified">—</div>
+                <div class="hstat-lbl">Verified</div>
+            </div>
+            <div class="hstat">
+                <div class="hstat-num" id="hs-avgde">—</div>
+                <div class="hstat-lbl">Avg ΔE</div>
+            </div>
+        </div>
+        <div class="history-list">
+            <div id="history-list-items">
+                <div class="hist-loading">Loading history...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SETTINGS -->

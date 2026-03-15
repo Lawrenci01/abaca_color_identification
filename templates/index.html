@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+    <title>Abaca Scanner</title>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+          rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/base.css">
+    <link rel="stylesheet" href="/static/css/components.css">
+    <link rel="stylesheet" href="/static/css/screens.css">
+    <style>
+        /* ── Boot loader ── */
+        #boot-loader {
+            position: fixed; inset: 0;
+            display: flex; align-items: center; justify-content: center;
+            background: #f4f9f6; z-index: 9999;
+            flex-direction: column; gap: 12px;
+        }
+        #boot-loader .bl-icon { font-size: 2.5rem; animation: blspin 1.2s linear infinite; }
+        @keyframes blspin { to { transform: rotate(360deg); } }
+        #boot-loader .bl-text { font-size: .8rem; color: #888; font-family: sans-serif; }
+        body.booted #boot-loader { display: none; }
+
+        /* ── Login screen overlay — sits outside #app, covers everything ──
+           On mobile it acts as a normal full-screen page.
+           On desktop it covers the entire viewport (no topbar/sidebar visible). */
+        #login-mount {
+            display: none;           /* shown by showLogin() */
+            position: fixed;
+            inset: 0;
+            z-index: 900;            /* above topbar(200), session-bar(150), nav(100) */
+            background: linear-gradient(160deg, #f4f9f6, #eaf3ee);
+            overflow-y: auto;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+        }
+        /* The inner #screen-login must fill its fixed parent */
+        #login-mount #screen-login {
+            position: static !important;
+            inset: auto !important;
+            width: 100% !important;
+            height: auto !important;
+            max-width: 100% !important;
+            display: flex !important;   /* always flex — visibility controlled by #login-mount */
+            overflow: visible !important;
+            padding-bottom: 0 !important;
+            background: transparent !important;
+        }
+        /* Location setup screen also uses this overlay pattern */
+        #screen-location-setup {
+            z-index: 910;
+        }
+    </style>
+</head>
+<body>
+
+<!-- BOOT LOADER -->
+<div id="boot-loader">
+    <div class="bl-icon">🌿</div>
+    <div class="bl-text">Loading...</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     CHROME — topbar, session bar, sidebar nav
+     All position:fixed, rendered at body level so they are never
+     inside a scrolling container and always render above #app.
+═══════════════════════════════════════════════════════════════ -->
+
+<!-- TOPBAR -->
+<div class="topbar" style="display:none;">
+    <div class="topbar-left">
+        <div class="logo-icon">🌿</div>
+        <h1>Abaca Scanner</h1>
+    </div>
+    <div class="topbar-right">
+        <div class="sync-dot" id="sync-dot"></div>
+        <div class="topbar-badge" id="topbar-scan-count">0 scans</div>
+    </div>
+</div>
+
+<!-- SESSION BAR — injected here; the partial only contains the .session-bar div -->
+<div id="session-bar-mount"></div>
+
+<!-- NAV — bottom bar on mobile, left sidebar on desktop -->
+<nav class="nav" style="display:none;">
+    <!-- populated by showApp() / auth.js -->
+</nav>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     LOGIN OVERLAY — full-screen, above all chrome
+     Shown by showLogin(), hidden by showApp()
+═══════════════════════════════════════════════════════════════ -->
+<div id="login-mount"></div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     APP SCREENS — the scrollable content area
+     On mobile: fills below topbar + session bar (padding-top via CSS)
+     On desktop: fixed rectangle left of sidebar, below both headers
+═══════════════════════════════════════════════════════════════ -->
+<div id="app">
+    <div id="dashboard-mount"></div>
+    <div id="scanner-mount"></div>
+    <div id="history-mount"></div>
+    <div id="settings-mount"></div>
+    <div id="admin-mount"></div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     TOASTS — always at body level for correct z-index
+═══════════════════════════════════════════════════════════════ -->
+<div id="loc-toast"><strong>📍 Location not set</strong>Set your location in the bar above before saving scans.</div>
+<div id="err-toast"><strong id="err-title">Error</strong><span id="err-body"></span></div>
+
+<!-- MODALS — outside #app so they overlay everything -->
+<div id="modals-mount"></div>
+
+<!-- USER SCANS MODAL -->
+<div id="user-scans-modal">
+    <div class="usm-sheet">
+        <div class="usm-header">
+            <div class="usm-avatar" id="usm-avatar">?</div>
+            <div class="usm-title">
+                <h3 id="usm-username">User</h3>
+                <p id="usm-subtitle">Loading scans...</p>
+            </div>
+            <button class="usm-close" onclick="closeUserScansModal()">&#x2715;</button>
+        </div>
+        <div class="usm-body" id="usm-body"></div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     PARTIAL LOADER + BOOT
+═══════════════════════════════════════════════════════════════ -->
+<script>
+(function() {
+    const partials = [
+        { url: '/static/pages/session_bar.html', mount: 'session-bar-mount' },
+        { url: '/static/pages/login.html',       mount: 'login-mount'       },
+        { url: '/static/pages/dashboard.html',   mount: 'dashboard-mount'   },
+        { url: '/static/pages/scanner.html',     mount: 'scanner-mount'     },
+        { url: '/static/pages/history.html',     mount: 'history-mount'     },
+        { url: '/static/pages/settings.html',    mount: 'settings-mount'    },
+        { url: '/static/pages/admin.html',       mount: 'admin-mount'       },
+        { url: '/static/pages/modals.html',      mount: 'modals-mount'      },
+    ];
+
+    const scripts = [
+        '/static/js/state.js',
+        '/static/js/dashboard.js',
+        '/static/js/history.js',
+        '/static/js/scanner.js',
+        '/static/js/auth.js',
+        '/static/js/detail.js',
+        '/static/js/calibration.js',
+        '/static/js/admin.js',
+        '/static/js/init.js',
+    ];
+
+    function loadScript(src) {
+        return new Promise((resolve, reject) => {
+            const s = document.createElement('script');
+            s.src = src;
+            s.onload = resolve;
+            s.onerror = () => reject(new Error('Failed to load: ' + src));
+            document.body.appendChild(s);
+        });
+    }
+
+    async function boot() {
+        await Promise.all(partials.map(p =>
+            fetch(p.url)
+                .then(r => r.ok ? r.text() : Promise.reject(p.url))
+                .then(html => { document.getElementById(p.mount).innerHTML = html; })
+                .catch(err => console.error('Partial load failed:', err))
+        ));
+
+        for (const src of scripts) {
+            await loadScript(src);
+        }
+
+        if (typeof initScannerEvents === 'function') initScannerEvents();
+
+        document.body.classList.add('booted');
+
+        if (typeof checkSession === 'function') checkSession();
+    }
+
+    boot().catch(err => {
+        console.error('Boot failed:', err);
+        document.getElementById('boot-loader').innerHTML =
+            '<div style="color:red;font-family:sans-serif;padding:20px;text-align:center;">Failed to load app.<br>Please refresh the page.</div>';
+    });
+})();
+</script>
+
+</body>
+</html>

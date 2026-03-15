@@ -1,0 +1,202 @@
+<div id="screen-admin-dashboard" class="screen">
+        <div class="admin-hero">
+            <div class="admin-hero-label">📊 Platform Overview — All Users</div>
+            <div class="admin-stats-grid">
+                <div class="admin-stat">
+                    <div class="admin-stat-num" id="adm-total">—</div>
+                    <div class="admin-stat-lbl">Total Scans</div>
+                    <div class="admin-stat-sub" id="adm-today-sub">— today</div>
+                </div>
+                <div class="admin-stat">
+                    <div class="admin-stat-num" id="adm-users">—</div>
+                    <div class="admin-stat-lbl">Graders</div>
+                    <div class="admin-stat-sub" id="adm-active-sub">— active</div>
+                </div>
+                <div class="admin-stat">
+                    <div class="admin-stat-num" id="adm-verified">—</div>
+                    <div class="admin-stat-lbl">Verified</div>
+                    <div class="admin-stat-sub" id="adm-verified-pct">—%</div>
+                </div>
+                <div class="admin-stat">
+                    <div class="admin-stat-num" id="adm-avgde">—</div>
+                    <div class="admin-stat-lbl">Avg ΔE</div>
+                    <div class="admin-stat-sub" id="adm-top-grade">top: —</div>
+                </div>
+            </div>
+        </div>
+        <div class="admin-section">
+            <div class="admin-section-title"><span>📈 Grade Distribution</span><span class="admin-section-action"
+                                                                                    onclick="switchAdminScreen('history')">View all →</span>
+            </div>
+            <div class="grade-dist-card" id="adm-grade-dist">
+                <div class="admin-loading">Loading...</div>
+            </div>
+        </div>
+        <div class="admin-section" style="padding-bottom:16px;">
+            <div class="admin-section-title"><span>⚡ Live Activity</span><span class="admin-section-action"
+                                                                               onclick="switchAdminScreen('history')">See all →</span>
+            </div>
+            <div class="activity-feed" id="adm-activity-feed">
+                <div class="admin-loading">Loading...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ADMIN HISTORY -->
+    <div id="screen-admin-history" class="screen">
+        <div style="padding:12px 16px;background:#fff;border-bottom:1px solid #d0d8e8;">
+            <div class="admin-search-wrap">
+                <div class="admin-search-icon">🔍</div>
+                <input type="text" class="admin-search-input" id="adm-hist-search"
+                       placeholder="Search grade, grader, location, batch…" oninput="admSearchHistory(this.value)">
+            </div>
+        </div>
+        <div class="admin-filter-bar">
+            <div class="admin-fp active" id="adm-fp-all" onclick="admSetStatus('all')">All</div>
+            <div class="admin-fp" id="adm-fp-verified" onclick="admSetStatus('verified')">✅ Verified</div>
+            <div class="admin-fp" id="adm-fp-pending" onclick="admSetStatus('pending')">⏳ Pending</div>
+            <div class="admin-fp-sep"></div>
+            <div class="admin-dropdown-wrap">
+                <div class="admin-fp" id="adm-fp-grader" onclick="admToggleDD('grader')">👤 Grader ▾</div>
+                <div class="admin-dropdown" id="adm-dd-grader">
+                    <div class="admin-dd-item" onclick="admSetGrader('')">All Graders</div>
+                </div>
+            </div>
+            <div class="admin-dropdown-wrap">
+                <div class="admin-fp" id="adm-fp-loc" onclick="admToggleDD('loc')">📍 Location ▾</div>
+                <div class="admin-dropdown" id="adm-dd-loc">
+                    <div class="admin-dd-item" onclick="admSetLoc('')">All Locations</div>
+                </div>
+            </div>
+            <div class="admin-dropdown-wrap">
+                <div class="admin-fp" id="adm-fp-rhs" onclick="admToggleDD('rhs')">🎨 Grade ▾</div>
+                <div class="admin-dropdown" id="adm-dd-rhs">
+                    <div class="admin-dd-item" onclick="admSetRhs('')">All Grades</div>
+                </div>
+            </div>
+        </div>
+        <div class="admin-date-range">
+            <input type="date" class="admin-date-input" id="adm-date-from" onchange="admApplyFilters()">
+            <span class="admin-date-sep">→</span>
+            <input type="date" class="admin-date-input" id="adm-date-to" onchange="admApplyFilters()">
+            <div class="admin-fp" onclick="admClearDates()" style="flex-shrink:0;font-size:.62rem;">✕ Clear</div>
+        </div>
+        <div class="admin-hist-stats">
+            <div class="admin-hstat">
+                <div class="admin-hstat-num" id="adm-hs-total">—</div>
+                <div class="admin-hstat-lbl">Total</div>
+            </div>
+            <div class="admin-hstat">
+                <div class="admin-hstat-num" id="adm-hs-today">—</div>
+                <div class="admin-hstat-lbl">Today</div>
+            </div>
+            <div class="admin-hstat">
+                <div class="admin-hstat-num" id="adm-hs-verified">—</div>
+                <div class="admin-hstat-lbl">Verified</div>
+            </div>
+            <div class="admin-hstat">
+                <div class="admin-hstat-num" id="adm-hs-avgde">—</div>
+                <div class="admin-hstat-lbl">Avg ΔE</div>
+            </div>
+        </div>
+        <div style="padding:0 16px 8px;" id="adm-hist-list">
+            <div class="admin-loading">Loading...</div>
+        </div>
+    </div>
+
+    <!-- ADMIN USERS -->
+    <div id="screen-admin-users" class="screen">
+        <div style="padding:12px 16px 4px;background:#fff;border-bottom:1px solid #d0d8e8;">
+            <div style="font-size:.9rem;font-weight:800;color:#1a2744;margin-bottom:2px;">👥 User Management</div>
+            <div style="font-size:.65rem;color:#6080a0;margin-bottom:10px;">All registered grader accounts</div>
+            <div class="admin-search-wrap">
+                <div class="admin-search-icon">🔍</div>
+                <input type="text" class="admin-search-input" id="adm-user-search" placeholder="Search username…"
+                       oninput="admSearchUsers(this.value)">
+            </div>
+        </div>
+        <div style="padding:8px 16px 16px;" id="adm-users-list">
+            <div class="admin-loading">Loading users...</div>
+        </div>
+    </div>
+
+    <!-- ADMIN SETTINGS -->
+    <div id="screen-admin-settings" class="screen">
+        <div style="padding:14px 16px 0;">
+            <div style="font-size:.65rem;text-transform:uppercase;letter-spacing:.1em;font-weight:700;color:#4a6080;margin-bottom:8px;">
+                🤖 Model Training
+            </div>
+        </div>
+        <div class="model-train-card">
+            <div class="mtc-title">Triple MLP Ensemble · Current Model</div>
+            <div class="mtc-grid">
+                <div class="mtc-stat">
+                    <div class="mtc-num" id="adm-model-verified">—</div>
+                    <div class="mtc-lbl">Verified Scans</div>
+                </div>
+                <div class="mtc-stat">
+                    <div class="mtc-num">88.67%</div>
+                    <div class="mtc-lbl">Model Accuracy</div>
+                </div>
+                <div class="mtc-stat">
+                    <div class="mtc-num" id="adm-model-needed">—</div>
+                    <div class="mtc-lbl">Needed to Retrain</div>
+                </div>
+                <div class="mtc-stat">
+                    <div class="mtc-num" id="adm-model-ready">—</div>
+                    <div class="mtc-lbl">Status</div>
+                </div>
+            </div>
+            <div style="font-size:.65rem;color:rgba(255,255,255,.5);margin-bottom:6px;">Progress to next retraining
+                (1,000 verified)
+            </div>
+            <div class="mtc-progress">
+                <div class="mtc-progress-fill" id="adm-model-bar" style="width:0%"></div>
+            </div>
+            <button class="mtc-btn" id="adm-retrain-btn" onclick="admTriggerRetrain()">🔁 Trigger Model Retraining
+            </button>
+        </div>
+        <div style="padding:0 16px 0;">
+            <div style="font-size:.65rem;text-transform:uppercase;letter-spacing:.1em;font-weight:700;color:#4a6080;margin-bottom:8px;">
+                ⚙️ System
+            </div>
+        </div>
+        <div class="admin-settings-card" style="margin:0 16px 12px;">
+            <div class="admin-settings-row">
+                <div>
+                    <div class="admin-sr-label">Color Reference</div>
+                    <div class="admin-sr-sub">RHS Horticultural Colour Chart</div>
+                </div>
+                <div class="admin-sr-badge ok">Loaded</div>
+            </div>
+            <div class="admin-settings-row">
+                <div>
+                    <div class="admin-sr-label">Database</div>
+                    <div class="admin-sr-sub">SQLite + Supabase sync</div>
+                </div>
+                <div class="admin-sr-badge ok" id="adm-db-badge">Online</div>
+            </div>
+            <div class="admin-settings-row">
+                <div>
+                    <div class="admin-sr-label">Registered Users</div>
+                    <div class="admin-sr-sub" id="adm-sys-users">Loading...</div>
+                </div>
+                <div class="admin-sr-badge" id="adm-sys-badge">—</div>
+            </div>
+        </div>
+        <div style="padding:0 16px 0;">
+            <div style="font-size:.65rem;text-transform:uppercase;letter-spacing:.1em;font-weight:700;color:#4a6080;margin-bottom:8px;">
+                🔐 Admin Account
+            </div>
+        </div>
+        <div class="admin-settings-card" style="margin:0 16px 4px;">
+            <div class="admin-settings-row">
+                <div>
+                    <div class="admin-sr-label" id="adm-settings-username">admin</div>
+                    <div class="admin-sr-sub">Administrator</div>
+                </div>
+                <div class="admin-sr-badge ok">Active</div>
+            </div>
+        </div>
+        <button class="admin-btn danger" style="margin-top:8px;" onclick="doLogout()">🚪 Logout</button>
+    </div>

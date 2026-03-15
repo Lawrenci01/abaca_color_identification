@@ -1,0 +1,153 @@
+<div id="screen-login">
+        <div class="login-logo" id="login-logo">🌿</div>
+        <div class="login-title" id="login-title">Abaca Scanner</div>
+        <div class="login-sub" id="login-sub">Sign in to your account<br>or create a new one</div>
+        <div class="login-card">
+            <!-- TABS -->
+            <div class="login-tabs">
+                <div class="login-tab active" id="ltab-login" onclick="switchLoginTab('login')">Sign In</div>
+                <div class="login-tab" id="ltab-register" onclick="switchLoginTab('register')">Register</div>
+                <div class="login-tab admin-tab" id="ltab-admin" onclick="switchLoginTab('admin')">🔐 Admin</div>
+            </div>
+
+            <!-- USER SIGN IN -->
+            <div id="lform-login">
+                <div class="login-field"><label>Username</label><input type="text" id="li-username"
+                                                                       placeholder="Your username"
+                                                                       autocomplete="username" autocapitalize="off">
+                </div>
+                <div class="login-field"><label>4-Digit PIN</label></div>
+                <div class="pin-row">
+                    <div class="pin-dot" id="pd0"></div>
+                    <div class="pin-dot" id="pd1"></div>
+                    <div class="pin-dot" id="pd2"></div>
+                    <div class="pin-dot" id="pd3"></div>
+                </div>
+                <div class="numpad">
+                    <div class="npkey" onclick="npPress('login',1)">1</div>
+                    <div class="npkey" onclick="npPress('login',2)">2</div>
+                    <div class="npkey" onclick="npPress('login',3)">3</div>
+                    <div class="npkey" onclick="npPress('login',4)">4</div>
+                    <div class="npkey" onclick="npPress('login',5)">5</div>
+                    <div class="npkey" onclick="npPress('login',6)">6</div>
+                    <div class="npkey" onclick="npPress('login',7)">7</div>
+                    <div class="npkey" onclick="npPress('login',8)">8</div>
+                    <div class="npkey" onclick="npPress('login',9)">9</div>
+                    <div class="npkey empty"></div>
+                    <div class="npkey" onclick="npPress('login',0)">0</div>
+                    <div class="npkey del" onclick="npDel('login')">⌫</div>
+                </div>
+                <div class="login-err" id="li-err"></div>
+                <button class="login-btn" onclick="doLogin()">Sign In</button>
+            </div>
+
+            <!-- REGISTER -->
+            <div id="lform-register" style="display:none;">
+                <div class="login-field"><label>Choose Username</label><input type="text" id="reg-username"
+                                                                              placeholder="e.g. juan_grader"
+                                                                              autocomplete="off" autocapitalize="off">
+                </div>
+                <div class="login-field"><label>Choose 4-Digit PIN</label></div>
+                <div class="pin-row">
+                    <div class="pin-dot" id="rpd0"></div>
+                    <div class="pin-dot" id="rpd1"></div>
+                    <div class="pin-dot" id="rpd2"></div>
+                    <div class="pin-dot" id="rpd3"></div>
+                </div>
+                <div class="numpad">
+                    <div class="npkey" onclick="npPress('reg',1)">1</div>
+                    <div class="npkey" onclick="npPress('reg',2)">2</div>
+                    <div class="npkey" onclick="npPress('reg',3)">3</div>
+                    <div class="npkey" onclick="npPress('reg',4)">4</div>
+                    <div class="npkey" onclick="npPress('reg',5)">5</div>
+                    <div class="npkey" onclick="npPress('reg',6)">6</div>
+                    <div class="npkey" onclick="npPress('reg',7)">7</div>
+                    <div class="npkey" onclick="npPress('reg',8)">8</div>
+                    <div class="npkey" onclick="npPress('reg',9)">9</div>
+                    <div class="npkey empty"></div>
+                    <div class="npkey" onclick="npPress('reg',0)">0</div>
+                    <div class="npkey del" onclick="npDel('reg')">⌫</div>
+                </div>
+                <div class="login-err" id="reg-err"></div>
+                <button class="login-btn" onclick="doRegister()">Create Account</button>
+            </div>
+
+            <!-- ADMIN LOGIN -->
+            <div id="lform-admin" style="display:none;">
+                <div style="display:flex;align-items:center;gap:10px;padding:12px;background:#f0f4fa;border-radius:10px;margin-bottom:14px;border:1px solid #d0d8e8;">
+                    <div style="width:36px;height:36px;border-radius:9px;background:linear-gradient(135deg,#1a2744,#0e3060);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;">
+                        🔐
+                    </div>
+                    <div>
+                        <div style="font-size:.85rem;font-weight:800;color:#1a2744;">Admin Portal</div>
+                        <div style="font-size:.65rem;color:#6080a0;">Authorized personnel only</div>
+                    </div>
+                </div>
+                <div class="login-field"><label>Admin Username</label><input type="text" id="adm-login-username"
+                                                                             placeholder="Admin username"
+                                                                             autocomplete="off" autocapitalize="off">
+                </div>
+                <div class="login-field"><label>Admin 4-Digit PIN</label></div>
+                <div class="pin-row">
+                    <div class="pin-dot" id="apd0"></div>
+                    <div class="pin-dot" id="apd1"></div>
+                    <div class="pin-dot" id="apd2"></div>
+                    <div class="pin-dot" id="apd3"></div>
+                </div>
+                <div class="numpad">
+                    <div class="npkey" onclick="npPress('admin',1)">1</div>
+                    <div class="npkey" onclick="npPress('admin',2)">2</div>
+                    <div class="npkey" onclick="npPress('admin',3)">3</div>
+                    <div class="npkey" onclick="npPress('admin',4)">4</div>
+                    <div class="npkey" onclick="npPress('admin',5)">5</div>
+                    <div class="npkey" onclick="npPress('admin',6)">6</div>
+                    <div class="npkey" onclick="npPress('admin',7)">7</div>
+                    <div class="npkey" onclick="npPress('admin',8)">8</div>
+                    <div class="npkey" onclick="npPress('admin',9)">9</div>
+                    <div class="npkey empty"></div>
+                    <div class="npkey" onclick="npPress('admin',0)">0</div>
+                    <div class="npkey del" onclick="npDel('admin')">⌫</div>
+                </div>
+                <div class="login-err" id="adm-err"></div>
+                <button class="login-btn admin-btn" onclick="doAdminLogin()">🔐 Access Admin Dashboard</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- LOCATION SETUP (shown once after login) -->
+    <div id="screen-location-setup"
+         style="display:none;position:fixed;inset:0;background:linear-gradient(160deg,#f4f9f6,#eaf3ee);z-index:998;flex-direction:column;align-items:center;justify-content:center;padding:24px;">
+        <div style="font-size:48px;margin-bottom:16px;">📍</div>
+        <div style="font-size:1.3rem;font-weight:800;color:var(--text);margin-bottom:6px;">Set Your Location</div>
+        <div style="font-size:.82rem;color:var(--sub);text-align:center;margin-bottom:24px;">Where are you grading
+            today?<br>This is saved with every scan.
+        </div>
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;width:100%;max-width:360px;box-shadow:var(--shadow);">
+            <div style="font-size:.65rem;color:var(--sub);font-weight:700;text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px;">
+                Location
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;background:var(--card2);border:1px solid var(--border);border-radius:9px;padding:10px 12px;margin-bottom:8px;">
+                <span style="font-size:.75rem;font-weight:800;color:var(--accent);font-family:'IBM Plex Mono',monospace;white-space:nowrap;">TCL —</span>
+                <select id="setup-location-input"
+                       style="flex:1;background:transparent;border:none;outline:none;font-size:.88rem;font-weight:600;color:var(--text);font-family:'Plus Jakarta Sans',sans-serif;">
+                    <option value="">Select location…</option>
+                    <option value="Location-1">Location-1</option>
+                    <option value="Location-2">Location-2</option>
+                    <option value="Location-3">Location-3</option>
+                    <option value="Location-4">Location-4</option>
+                    <option value="Location-5">Location-5</option>
+                </select>
+            </div>
+            <div style="font-size:.65rem;color:var(--sub);margin-bottom:16px;">You can update this anytime from the top
+                bar.
+            </div>
+            <button onclick="confirmLocation()"
+                    style="width:100%;padding:13px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border:none;border-radius:9px;font-size:.95rem;font-weight:800;cursor:pointer;font-family:'Plus Jakarta Sans',sans-serif;box-shadow:0 2px 12px rgba(26,140,69,.25);">
+                ✅ Confirm Location
+            </button>
+            <button onclick="skipLocation()"
+                    style="width:100%;padding:10px;background:transparent;border:none;color:var(--sub);font-size:.78rem;font-weight:600;cursor:pointer;font-family:'Plus Jakarta Sans',sans-serif;margin-top:6px;">
+                Skip for now
+            </button>
+        </div>
+    </div>

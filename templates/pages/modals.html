@@ -1,0 +1,292 @@
+<!-- CALIBRATION MODAL -->
+<div id="cal-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:300;overflow-y:auto;">
+    <div style="background:var(--bg);min-height:100%;max-width:480px;margin:0 auto;display:flex;flex-direction:column;">
+        <div style="display:flex;align-items:center;gap:12px;padding:14px 16px;background:var(--header);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:10;">
+            <div onclick="closeCalibration()"
+                 style="width:34px;height:34px;border-radius:8px;background:var(--card2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px;">
+                ←
+            </div>
+            <div style="flex:1;">
+                <div style="font-size:.9rem;font-weight:800;color:var(--text);">⚖️ White Balance Calibration</div>
+                <div style="font-size:.65rem;color:var(--sub);font-family:'IBM Plex Mono',monospace;"
+                     id="cal-step-label">Step 1 of 3
+                </div>
+            </div>
+            <div id="cal-status-chip"
+                 style="font-size:.68rem;font-weight:700;padding:4px 10px;border-radius:7px;background:var(--card2);color:var(--sub);border:1px solid var(--border);">
+                Not calibrated
+            </div>
+        </div>
+        <div style="display:flex;gap:4px;padding:12px 16px 0;">
+            <div class="cal-step-dot active" id="cdot-1"></div>
+            <div class="cal-step-dot" id="cdot-2"></div>
+            <div class="cal-step-dot" id="cdot-3"></div>
+        </div>
+        <div id="cal-step-1" style="padding:16px;flex:1;">
+            <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:14px;">
+                <div style="font-size:.95rem;font-weight:800;margin-bottom:10px;">📋 Before you start</div>
+                <div style="display:flex;flex-direction:column;gap:10px;">
+                    <div style="display:flex;gap:10px;align-items:flex-start;">
+                        <div style="width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;font-size:.72rem;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                            1
+                        </div>
+                        <div style="font-size:.82rem;color:var(--sub);line-height:1.5;">Find a <strong>plain white piece
+                            of paper</strong> or the white border of your RHS chart
+                        </div>
+                    </div>
+                    <div style="display:flex;gap:10px;align-items:flex-start;">
+                        <div style="width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;font-size:.72rem;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                            2
+                        </div>
+                        <div style="font-size:.82rem;color:var(--sub);line-height:1.5;">Use the <strong>same
+                            lighting</strong> you normally use when grading
+                        </div>
+                    </div>
+                    <div style="display:flex;gap:10px;align-items:flex-start;">
+                        <div style="width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;font-size:.72rem;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                            3
+                        </div>
+                        <div style="font-size:.82rem;color:var(--sub);line-height:1.5;">Hold your phone <strong>15–25 cm
+                            away</strong> — no shadows, no glare
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div id="cal-current-status"
+                 style="background:var(--card);border:1px solid var(--border);border-radius:11px;padding:14px;margin-bottom:16px;">
+                <div style="font-size:.68rem;font-weight:700;color:var(--sub);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px;">
+                    Current Profile
+                </div>
+                <div id="cal-profile-display" style="font-size:.82rem;color:var(--sub);">Loading...</div>
+            </div>
+            <button onclick="startCalStep2()"
+                    style="width:100%;padding:14px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border:none;border-radius:11px;font-size:.95rem;font-weight:800;cursor:pointer;font-family:'Plus Jakarta Sans',sans-serif;margin-bottom:8px;">
+                📷 Take White Reference Photo →
+            </button>
+            <button onclick="document.getElementById('cal-file-input').click()"
+                    style="width:100%;padding:12px;background:var(--card);border:1px solid var(--border);border-radius:11px;font-size:.88rem;font-weight:700;cursor:pointer;font-family:'Plus Jakarta Sans',sans-serif;color:var(--text);">
+                🖼 Upload White Reference Image
+            </button>
+            <input type="file" id="cal-file-input" accept="image/*" onchange="handleCalImage(this)"
+                   style="display:none;">
+            <input type="file" id="cal-cam-input" accept="image/*" capture="environment" onchange="handleCalImage(this)"
+                   style="display:none;">
+        </div>
+        <div id="cal-step-2" style="display:none;padding:16px;flex:1;">
+            <div style="font-size:.9rem;font-weight:800;color:var(--text);margin-bottom:4px;">📸 Analyzing White
+                Reference
+            </div>
+            <div style="font-size:.75rem;color:var(--sub);margin-bottom:12px;">The center region is being measured.
+            </div>
+            <div style="margin-bottom:12px;border-radius:12px;overflow:hidden;border:1px solid var(--border);background:#000;position:relative;">
+                <canvas id="cal-preview-canvas"
+                        style="width:100%;display:block;max-height:280px;object-fit:contain;"></canvas>
+                <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:40%;height:40%;border:2px solid var(--accent);border-radius:6px;box-shadow:0 0 0 9999px rgba(0,0,0,.45);"></div>
+            </div>
+            <div style="background:var(--card);border:1px solid var(--border);border-radius:11px;padding:14px;margin-bottom:12px;">
+                <div style="font-size:.68rem;font-weight:700;color:var(--sub);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px;">
+                    Measured RGB
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;">
+                    <div style="text-align:center;background:var(--card2);border-radius:8px;padding:10px 6px;">
+                        <div style="font-size:1.1rem;font-weight:800;font-family:'IBM Plex Mono',monospace;color:#e05050;"
+                             id="cal-measured-r">—
+                        </div>
+                        <div style="font-size:.6rem;color:var(--sub);margin-top:2px;font-weight:700;">RED</div>
+                    </div>
+                    <div style="text-align:center;background:var(--card2);border-radius:8px;padding:10px 6px;">
+                        <div style="font-size:1.1rem;font-weight:800;font-family:'IBM Plex Mono',monospace;color:#30a050;"
+                             id="cal-measured-g">—
+                        </div>
+                        <div style="font-size:.6rem;color:var(--sub);margin-top:2px;font-weight:700;">GREEN</div>
+                    </div>
+                    <div style="text-align:center;background:var(--card2);border-radius:8px;padding:10px 6px;">
+                        <div style="font-size:1.1rem;font-weight:800;font-family:'IBM Plex Mono',monospace;color:#3060c0;"
+                             id="cal-measured-b">—
+                        </div>
+                        <div style="font-size:.6rem;color:var(--sub);margin-top:2px;font-weight:700;">BLUE</div>
+                    </div>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--card2);border-radius:8px;">
+                    <div id="cal-measured-swatch"
+                         style="width:32px;height:32px;border-radius:6px;border:1px solid var(--border);flex-shrink:0;"></div>
+                    <div>
+                        <div style="font-size:.7rem;color:var(--sub);font-weight:700;">Camera sees white as:</div>
+                        <div style="font-size:.82rem;font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--text);"
+                             id="cal-measured-hex">—
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div style="background:var(--card);border:1px solid var(--border);border-radius:11px;padding:14px;margin-bottom:12px;">
+                <div style="font-size:.68rem;font-weight:700;color:var(--sub);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px;">
+                    Correction Gains
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+                    <div style="text-align:center;background:var(--card2);border-radius:8px;padding:8px 6px;">
+                        <div style="font-size:.95rem;font-weight:800;font-family:'IBM Plex Mono',monospace;color:#e05050;"
+                             id="cal-gain-r">—
+                        </div>
+                        <div style="font-size:.58rem;color:var(--sub);margin-top:2px;font-weight:700;">R gain</div>
+                    </div>
+                    <div style="text-align:center;background:var(--card2);border-radius:8px;padding:8px 6px;">
+                        <div style="font-size:.95rem;font-weight:800;font-family:'IBM Plex Mono',monospace;color:#30a050;"
+                             id="cal-gain-g">—
+                        </div>
+                        <div style="font-size:.58rem;color:var(--sub);margin-top:2px;font-weight:700;">G gain</div>
+                    </div>
+                    <div style="text-align:center;background:var(--card2);border-radius:8px;padding:8px 6px;">
+                        <div style="font-size:.95rem;font-weight:800;font-family:'IBM Plex Mono',monospace;color:#3060c0;"
+                             id="cal-gain-b">—
+                        </div>
+                        <div style="font-size:.58rem;color:var(--sub);margin-top:2px;font-weight:700;">B gain</div>
+                    </div>
+                </div>
+                <div style="margin-top:8px;font-size:.7rem;color:var(--sub);text-align:center;" id="cal-bias-label">—
+                </div>
+                <div id="cal-warnings"></div>
+            </div>
+            <div style="display:flex;gap:8px;">
+                <button onclick="goCalStep1()"
+                        style="flex:1;padding:12px;background:var(--card);border:1px solid var(--border);border-radius:10px;font-size:.85rem;font-weight:700;cursor:pointer;font-family:'Plus Jakarta Sans',sans-serif;color:var(--text);">
+                    ↩ Retake
+                </button>
+                <button onclick="applyCalibration()"
+                        style="flex:2;padding:12px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border:none;border-radius:10px;font-size:.88rem;font-weight:800;cursor:pointer;font-family:'Plus Jakarta Sans',sans-serif;">
+                    ✅ Apply Calibration
+                </button>
+            </div>
+        </div>
+        <div id="cal-step-3" style="display:none;padding:32px 16px;text-align:center;flex:1;">
+            <div style="width:80px;height:80px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:36px;margin:0 auto 16px;">
+                ✅
+            </div>
+            <div style="font-size:1.2rem;font-weight:800;color:var(--text);margin-bottom:6px;">Calibration Saved!</div>
+            <div style="font-size:.82rem;color:var(--sub);margin-bottom:24px;">White balance correction profile saved.
+            </div>
+            <div id="cal-saved-summary"
+                 style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:20px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;"></div>
+            <div style="font-size:.72rem;color:var(--sub);margin-bottom:16px;" id="cal-saved-time">—</div>
+            <button onclick="closeCalibration()"
+                    style="width:100%;padding:14px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border:none;border-radius:11px;font-size:.95rem;font-weight:800;cursor:pointer;font-family:'Plus Jakarta Sans',sans-serif;margin-bottom:8px;">
+                Done →
+            </button>
+            <button onclick="goCalStep1()"
+                    style="width:100%;padding:12px;background:var(--card);border:1px solid var(--border);border-radius:11px;font-size:.85rem;font-weight:700;cursor:pointer;font-family:'Plus Jakarta Sans',sans-serif;color:var(--text);">
+                🔄 Recalibrate
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- HISTORY DETAIL MODAL -->
+<div id="detail-modal">
+    <div class="dm">
+        <div class="dm-topbar">
+            <div class="dm-back" onclick="closeDetail()">←</div>
+            <div style="flex:1;">
+                <div class="dm-topbar-title" id="dm-title">Scan Detail</div>
+                <div class="dm-scan-id" id="dm-scan-id"></div>
+            </div>
+            <div id="dm-status-chip" style="font-size:.68rem;font-weight:700;padding:4px 10px;border-radius:7px;"></div>
+        </div>
+        <div id="dm-hero-thumb" class="dm-hero" style="display:none;">
+            <img id="dm-thumb-img" src="" alt="Scan">
+            <div class="dm-hero-de-badge" id="dm-hero-de-badge">ΔE —</div>
+            <div class="dm-hero-overlay">
+                <div class="dm-hero-code-row">
+                    <div class="dm-hero-swatch" id="dm-hero-swatch"></div>
+                    <div>
+                        <div class="dm-hero-code-text" id="dm-hero-code">—</div>
+                        <div class="dm-hero-de" id="dm-hero-verdict">—</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div id="dm-hero-gradient" class="dm-nothumb-hero" style="display:none;">
+            <div class="dm-nothumb-bg" id="dm-nothumb-bg"></div>
+            <div class="dm-nothumb-content">
+                <div class="dm-nh-swatch" id="dm-nh-swatch"></div>
+                <div>
+                    <div class="dm-nh-code" id="dm-nh-code">—</div>
+                    <div class="dm-nh-de" id="dm-nh-de">—</div>
+                </div>
+            </div>
+        </div>
+        <div class="dm-grader-loc">
+            <div class="dm-gl-card">
+                <div class="dm-gl-icon">👤</div>
+                <div>
+                    <div class="dm-gl-lbl">Grader</div>
+                    <div class="dm-gl-val" id="dm-gl-grader">—</div>
+                </div>
+            </div>
+            <div class="dm-gl-card">
+                <div class="dm-gl-icon">📍</div>
+                <div style="min-width:0;">
+                    <div class="dm-gl-lbl">Location</div>
+                    <div class="dm-gl-val teal" id="dm-gl-location"
+                         style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">—
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="dm-verdict-banner" id="dm-verdict-banner">
+            <div>
+                <div class="dm-verdict-lbl" id="dm-verdict-lbl">Result</div>
+                <div class="dm-verdict-text" id="dm-verdict">—</div>
+                <div style="font-size:.72rem;margin-top:2px;opacity:.75;" id="dm-verdict-explain"></div>
+            </div>
+            <div style="text-align:right;">
+                <div class="dm-de-big" id="dm-de">—</div>
+                <div class="dm-de-lbl">Delta-E</div>
+            </div>
+        </div>
+        <div class="dm-colors">
+            <div class="dm-color-card">
+                <div class="dm-color-lbl">Scanned Color</div>
+                <div class="dm-color-swatch" id="dm-sw-scan"></div>
+                <div class="dm-color-code" id="dm-scan-hex-code">—</div>
+            </div>
+            <div class="dm-color-vs">
+                <div style="font-size:.62rem;font-weight:700;color:var(--sub);">vs</div>
+            </div>
+            <div class="dm-color-card matched">
+                <div class="dm-color-lbl accent">RHS Reference</div>
+                <div class="dm-color-swatch" id="dm-sw-ref"></div>
+                <div class="dm-color-code" id="dm-rhs">—</div>
+                <div class="dm-color-sub" id="dm-ref-hex">—</div>
+            </div>
+        </div>
+        <div class="dm-metrics">
+            <div class="dm-section-title">📊 Scan Metrics</div>
+            <div class="dm-metrics-grid">
+                <div class="dm-met">
+                    <div class="dm-met-lbl">Match Score</div>
+                    <div class="dm-met-val" id="dm-score">—</div>
+                </div>
+                <div class="dm-met">
+                    <div class="dm-met-lbl">Fiber Hex</div>
+                    <div class="dm-met-val" id="dm-hex" style="font-size:.78rem;">—</div>
+                </div>
+                <div class="dm-met">
+                    <div class="dm-met-lbl">Segmentation</div>
+                    <div class="dm-met-val" id="dm-seg">—</div>
+                </div>
+                <div class="dm-met">
+                    <div class="dm-met-lbl">White Balance</div>
+                    <div class="dm-met-val" id="dm-wb">—</div>
+                </div>
+            </div>
+        </div>
+        <div class="dm-top5" id="dm-top5-wrap">
+            <div class="dm-section-title">🏆 Top 5 RHS Matches</div>
+            <div class="dm-top5-inner" id="dm-top5-list"></div>
+        </div>
+        <div class="dm-info">
+            <div class="dm-section-title">📋 Scan Information</div>
+            <div class="dm-info-table" id="dm-info-table"></div>
+        </div>
+        <div class="dm-actions" id="dm-actions"></div>
+    </div>
+</div>

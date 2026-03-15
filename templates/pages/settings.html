@@ -1,0 +1,53 @@
+<div id="screen-settings" class="screen">
+        <div class="settings-section">
+            <div class="settings-section-title">⚙️ Calibration</div>
+            <div class="settings-card">
+                <div class="settings-row">
+                    <div>
+                        <div class="sr-label">White Balance</div>
+                        <div class="sr-sub" id="wb-last">Last: —</div>
+                    </div>
+                    <div class="sr-badge ok" id="wb-status-badge">Auto</div>
+                </div>
+                <div class="settings-row">
+                    <div>
+                        <div class="sr-label">Color Reference</div>
+                        <div class="sr-sub">RHS Horticultural Colour Chart</div>
+                    </div>
+                    <div class="sr-badge ok">Loaded</div>
+                </div>
+            </div>
+            <button class="settings-btn accent" onclick="openCalibration()">⚖️ CALIBRATE NOW</button>
+        </div>
+        <div class="settings-section">
+            <div class="settings-section-title">👤 Account</div>
+            <div class="settings-card">
+                <div class="settings-row">
+                    <div>
+                        <div class="sr-label" id="settings-username">User</div>
+                        <div class="sr-sub">Grader Account</div>
+                    </div>
+                    <div class="sr-badge ok">Active</div>
+                </div>
+                <div class="settings-row">
+                    <div>
+                        <div class="sr-label">Default Location</div>
+                        <div class="sr-sub" id="settings-location-val">Not set</div>
+                    </div>
+                    <div>
+                        <button onclick="focusLocationBar()"
+                                style="background:var(--accent-light);border:1px solid var(--accent-lighter);border-radius:7px;padding:4px 10px;font-size:.68rem;color:var(--accent);font-weight:700;cursor:pointer;font-family:'Plus Jakarta Sans',sans-serif;">
+                            Edit
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <button class="settings-btn" onclick="doLogout()">🚪 Logout</button>
+        </div>
+    </div>
+
+    <!-- ================================================================
+         ADMIN SCREENS
+    ================================================================ -->
+
+    <!-- ADMIN DASHBOARD -->
