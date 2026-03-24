@@ -717,6 +717,8 @@
     function renderScanResult(d) {
         currentResult = d;
         verifyState = null;
+        // Update lighting indicator from result
+        updateLightingFromResult(d);
         document.getElementById('sib-grader').textContent = currentUser ? currentUser.username : '—';
         document.getElementById('sib-location').textContent = getFullLocation() || '⚠️ Not set';
         document.getElementById('sib-location').style.color = getFullLocation() ? 'var(--text)' : 'var(--warn)';
@@ -905,4 +907,94 @@ function showError(title,body){
   document.addEventListener('touchend',onUp);
 })();
 
+// ============================================================
+// ============================================================
+//  LIGHTING ADAPTER — auto-adjust for field lighting conditions
+// ============================================================
+
+let _lightingStatus = null;
+
+async function fetchLightingStatus() {
+    try {
+        const r = await fetch('/api/lighting');
+        _lightingStatus = await r.json();
+        updateLightingUI(_lightingStatus);
+    } catch(e) {}
+}
+
+function updateLightingUI(status) {
+    if (!status || !status.ok) return;
+
+    const chip = document.getElementById('lighting-chip');
+    const bar  = document.getElementById('lighting-status-bar');
+    const txt  = document.getElementById('lighting-status-text');
+    if (!chip || !bar || !txt) return;
+
+    chip.style.display = 'flex';
+    bar.style.display  = 'flex';
+
+    if (status.mode === 'learned' && status.samples >= 2) {
+        // Learned from confirmed scans — show in green
+        chip.textContent   = `💡 LEARNED (${status.samples})`;
+        chip.style.background = '#e8f5ee';
+        chip.style.color      = '#1a8c45';
+        chip.style.borderColor = '#d0edda';
+        txt.textContent = `Lighting learned from ${status.samples} confirmed scan${status.samples>1?'s':''} — auto-correcting for your conditions`;
+    } else {
+        // Auto-detect mode
+        const g = status.gains;
+        let label = 'AUTO';
+        let desc  = 'Auto-detecting lighting conditions';
+        if (g) {
+            // Describe lighting condition from gains
+            if (g.L < 0.72) {
+                label = '🌑 DARK';
+                desc  = 'Dark/underexposed — consider more light or confirm 1 scan to learn';
+            } else if (g.L < 0.85) {
+                label = '🌿 SHADE';
+                desc  = 'Shade lighting detected — auto-correcting colors';
+            } else if (g.L > 1.02) {
+                label = '☀️ SUN';
+                desc  = 'Direct sunlight detected — auto-correcting colors';
+            } else {
+                label = '💡 AUTO';
+                desc  = 'Normal lighting — no correction needed';
+            }
+        }
+        chip.textContent   = label;
+        chip.style.background = '#f0f5f2';
+        chip.style.color      = '#5a7a65';
+        chip.style.borderColor = '#d0edda';
+        txt.textContent = desc;
+    }
+}
+
+async function resetLighting() {
+    if (!confirm('Reset lighting calibration?\nThis clears learned corrections for this session.')) return;
+    try {
+        await fetch('/api/lighting/reset', { method: 'POST' });
+        _lightingStatus = null;
+        const chip = document.getElementById('lighting-chip');
+        const txt  = document.getElementById('lighting-status-text');
+        if (chip) { chip.textContent = '💡 AUTO'; }
+        if (txt)  { txt.textContent  = 'Lighting reset — auto-detecting...'; }
+        setTimeout(fetchLightingStatus, 500);
+    } catch(e) {}
+}
+
+// Update lighting status after each scan result is shown
+function updateLightingFromResult(result) {
+    if (!result) return;
+    const gains = result.lighting_gains;
+    const mode  = result.illuminant_correction_active ? 'learned' : 'auto';
+    const samples = result.illuminant_correction_samples || 0;
+    if (gains) {
+        updateLightingUI({ ok: true, mode, samples, gains });
+    }
+}
+
+// Fetch lighting status on page load
+document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(fetchLightingStatus, 1000);
+});
 // ============================================================

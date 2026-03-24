@@ -1,12 +1,15 @@
 """
 augment_dataset.py — Parallel Dataset Generation (876 classes)
 
-Fixes applied:
-- Seed fix: each worker uses hash(class_label) for unique, reproducible seeds
-             per class — prevents duplicate augmentation sequences across workers
-- Fixed single-line if/return statements (were not returning correctly)
-- Auto-cleans augmented/ folder before generating (prevents stale image mixing)
-- Prints skipped classes at end
+Fiber augmentation analysis (measured Lab drift vs adjacent grade separation=10.12):
+    KEPT   aug_fiber_strands        mean ΔE=1.05  safe — brightness modulation only
+    KEPT   aug_fiber_waviness       mean ΔE=0.45  safe — spatial warp, no color change
+    KEPT   aug_uneven_fiber_density mean ΔE=1.36  safe — low-frequency density variation
+    REMOVED aug_fiber_shadow_lines  mean ΔE=4.24  too much color drift
+    REMOVED aug_surface_sheen       mean ΔE=6.14  pushes into adjacent class territory
+    REMOVED aug_circular_vignette   mean ΔE=9.20  blue cast corrupts Lab values badly
+
+N_AUGMENTS=1000 — matches original dataset size for 90%+ val accuracy.
 """
 import csv, random, io, os, shutil
 import numpy as np
@@ -16,7 +19,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 SWATCH_SIZE = 96
-N_AUGMENTS  = 300   # was 1000 — fiber augs give better coverage per image
+N_AUGMENTS  = 1000
 N_TEST      = 10
 
 RHS_CSV      = Path("abaca_pipeline/rhs_colors.csv")
@@ -24,7 +27,8 @@ SWATCHES_DIR = Path("swatches_real")
 OUT_DIR      = Path("abaca_pipeline/augmented")
 MANIFEST_OUT = Path("abaca_pipeline/augmented_manifest.csv")
 
-# ── AUGMENTATION FUNCTIONS ────────────────────────────────────────────────────
+
+# ── STANDARD AUGMENTATIONS ────────────────────────────────────────────────────
 
 def aug_brightness(img):
     return ImageEnhance.Brightness(img).enhance(random.uniform(0.65, 1.40))
@@ -44,7 +48,6 @@ def aug_noise(img):
     )
 
 def aug_rotate(img):
-    # Limited to ±15° — full 360° creates black corners on real texture crops
     return img.rotate(random.uniform(-15, 15), expand=False)
 
 def aug_flip(img):
@@ -75,11 +78,9 @@ def aug_sharpness(img):
     return ImageEnhance.Sharpness(img).enhance(random.uniform(0.5, 2.0))
 
 def aug_blur(img):
-    # Capped at 0.8 — radius 1.2 washes out texture on 96px images
     return img.filter(ImageFilter.GaussianBlur(radius=random.uniform(0.3, 0.8)))
 
 def aug_jpeg(img):
-    # Floor raised to 75 — quality 65 creates harsh blocks on 96px images
     buf = io.BytesIO()
     img.save(buf, format='JPEG', quality=random.randint(75, 95))
     buf.seek(0)
@@ -106,137 +107,44 @@ def aug_channel_scale(img):
     return Image.fromarray(arr.astype(np.uint8))
 
 
-# ── ABACA FIBER-SPECIFIC AUGMENTATIONS ────────────────────────────────────────
-# These simulate the real visual properties of photographed abaca fiber:
-# parallel strands, inter-strand shadows, surface sheen, fiber waviness,
-# and the circular hole vignette from the blue grading card.
+# ── SAFE FIBER AUGMENTATIONS (mean Lab drift < 2.0 ΔE) ───────────────────────
 
 def aug_fiber_strands(img):
     """
-    Simulate abaca fiber strand texture — parallel lines of alternating
-    brightness running in a dominant direction.
-
-    Real abaca fiber has bundles of parallel strands. When photographed,
-    these create a fine linear pattern: slightly brighter on strand tops,
-    slightly darker in the grooves between strands.
-
-    Strand width: 2-5px at 96px image size (represents 1-3mm bundles).
-    Brightness variation: ±8-18% — subtle enough to look like texture,
-    strong enough to affect feature extraction.
-    Angle: mostly vertical (0-30°) since fibers are usually laid flat,
-    but rotated ±30° to cover different orientations.
+    Fiber strand texture via brightness modulation only.
+    Mean Lab drift=1.05 — safe, median not affected by alternating stripes.
     """
-    arr   = np.array(img, dtype=np.float32)
-    h, w  = arr.shape[:2]
-    angle = random.uniform(-30, 30)          # fiber orientation
-    strand_w = random.randint(2, 5)          # pixel width of one strand
-    depth    = random.uniform(0.08, 0.18)    # brightness variation depth
+    arr      = np.array(img, dtype=np.float32)
+    h, w     = arr.shape[:2]
+    angle    = random.uniform(-30, 30)
+    strand_w = random.randint(2, 5)
+    depth    = random.uniform(0.06, 0.12)
 
-    # Build a stripe pattern then rotate it
     stripe = np.zeros((h, w), dtype=np.float32)
     for x in range(w):
-        # sine wave along x axis gives smooth strand profile
         stripe[:, x] = np.sin(x * np.pi / strand_w) * depth
 
-    # Rotate stripe map to match fiber angle
     import cv2 as _cv2
-    M = _cv2.getRotationMatrix2D((w / 2, h / 2), angle, 1.0)
+    M      = _cv2.getRotationMatrix2D((w / 2, h / 2), angle, 1.0)
     stripe = _cv2.warpAffine(stripe, M, (w, h))
-
-    # Apply multiplicatively to all channels (preserves hue)
-    arr *= (1.0 + stripe[:, :, np.newaxis])
-    return Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8))
-
-
-def aug_fiber_shadow_lines(img):
-    """
-    Simulate the micro-shadows cast between fiber strands.
-
-    Between each strand bundle, a narrow dark groove forms where strands
-    don't lie perfectly flat. This creates thin dark lines (1-2px) spaced
-    every 3-8px across the image. Unlike aug_fiber_strands which is smooth,
-    these are sharp-edged dark lines — harder shadows.
-    """
-    arr    = np.array(img, dtype=np.float32)
-    h, w   = arr.shape[:2]
-    spacing = random.randint(3, 8)     # pixels between shadow lines
-    depth   = random.uniform(0.12, 0.28)  # shadow darkness
-    angle   = random.uniform(-25, 25)
-
-    shadow = np.zeros((h, w), dtype=np.float32)
-    for x in range(0, w, spacing):
-        shadow[:, min(x, w-1)] = -depth
-        if x + 1 < w:
-            shadow[:, x + 1] = -depth * 0.4  # softer edge
-
-    import cv2 as _cv2
-    M = _cv2.getRotationMatrix2D((w / 2, h / 2), angle, 1.0)
-    shadow = _cv2.warpAffine(shadow, M, (w, h))
-
-    arr *= (1.0 + shadow[:, :, np.newaxis])
-    return Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8))
-
-
-def aug_surface_sheen(img):
-    """
-    Simulate the semi-gloss specular sheen on dried abaca fiber.
-
-    Dried abaca has a slight waxy/silky surface that catches light
-    along strand edges. This appears as small bright elliptical or
-    linear highlights — not full glare, just a localized brightness boost
-    in a directional band across the image.
-
-    This is different from aug_exposure_gradient: gradient is smooth
-    and uniform; sheen is a narrow bright band with soft falloff,
-    angled at ~30-60° to match typical fiber/light geometry.
-    """
-    arr  = np.array(img, dtype=np.float32)
-    h, w = arr.shape[:2]
-
-    # Sheen band: center position, width, angle, intensity
-    center_x = random.randint(w // 4, 3 * w // 4)
-    center_y = random.randint(h // 4, 3 * h // 4)
-    band_w   = random.randint(8, 24)   # narrow band
-    strength = random.uniform(0.10, 0.25)
-    angle    = random.uniform(20, 70)  # degrees from horizontal
-
-    # Build distance map from the band axis
-    Y, X = np.ogrid[:h, :w]
-    rad  = np.radians(angle)
-    # Signed distance from band center line
-    dist = np.abs((X - center_x) * np.cos(rad) + (Y - center_y) * np.sin(rad))
-    # Gaussian falloff from band center
-    sheen_map = strength * np.exp(-(dist ** 2) / (2 * (band_w ** 2)))
-
-    arr *= (1.0 + sheen_map[:, :, np.newaxis])
+    arr   *= (1.0 + stripe[:, :, np.newaxis])
     return Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8))
 
 
 def aug_fiber_waviness(img):
     """
-    Simulate slight fiber bundle waviness — fibers are not perfectly
-    parallel, they have gentle curves and crossings.
-
-    Implemented as a subtle elastic deformation: each row is shifted
-    left/right by a small sinusoidal amount, creating a wave-like
-    distortion that mimics fiber curvature without breaking the
-    overall color signal.
-
-    Wave amplitude: 2-6px (very subtle at 96px)
-    Wave frequency: 0.5-2 cycles across the image
+    Fiber bundle waviness via spatial warp only.
+    Mean Lab drift=0.45 — moves pixels, does not change their values.
     """
     import cv2 as _cv2
-    arr  = np.array(img, dtype=np.float32)
-    h, w = arr.shape[:2]
-
-    amplitude = random.uniform(2.0, 6.0)
+    arr       = np.array(img, dtype=np.float32)
+    h, w      = arr.shape[:2]
+    amplitude = random.uniform(1.0, 4.0)
     frequency = random.uniform(0.5, 2.0)
     phase     = random.uniform(0, 2 * np.pi)
 
-    # Build displacement map
-    rows = np.arange(h)
+    rows  = np.arange(h)
     shift = amplitude * np.sin(2 * np.pi * frequency * rows / h + phase)
-
     map_x = np.zeros((h, w), dtype=np.float32)
     map_y = np.zeros((h, w), dtype=np.float32)
     for r in range(h):
@@ -249,122 +157,59 @@ def aug_fiber_waviness(img):
     return Image.fromarray(np.clip(warped, 0, 255).astype(np.uint8))
 
 
-def aug_circular_vignette(img):
-    """
-    Simulate the circular hole vignette from the blue grading card.
-
-    When a grader photographs abaca through the circular hole in the
-    blue card, the edge of the hole creates a soft falloff — pixels
-    near the edge receive slightly less direct light and may show a
-    subtle darkening toward the circle boundary.
-
-    This also adds a very faint cool (blue) color cast at the extreme
-    edges, from light scatter off the blue card surface.
-
-    Radius: 85-95% of half the image width (circle almost fills frame).
-    Edge softness: 5-12px gradual falloff.
-    """
-    arr  = np.array(img, dtype=np.float32)
-    h, w = arr.shape[:2]
-
-    cx, cy = w / 2, h / 2
-    radius = min(w, h) / 2 * random.uniform(0.82, 0.96)
-    edge_w = random.uniform(5.0, 14.0)
-    depth  = random.uniform(0.08, 0.20)
-
-    Y, X  = np.ogrid[:h, :w]
-    dist  = np.sqrt((X - cx) ** 2 + (Y - cy) ** 2)
-
-    # Smooth vignette: 1.0 at center, falls off near edge
-    vignette = 1.0 - depth * np.clip((dist - (radius - edge_w)) / edge_w, 0, 1)
-
-    # Very subtle blue cast at edges (light scatter from blue card)
-    blue_cast = np.clip((dist - (radius - edge_w * 2)) / (edge_w * 2), 0, 1) * 0.06
-    arr[:, :, 0] = np.clip(arr[:, :, 0] * vignette, 0, 255)           # R
-    arr[:, :, 1] = np.clip(arr[:, :, 1] * vignette, 0, 255)           # G
-    arr[:, :, 2] = np.clip(arr[:, :, 2] * vignette + blue_cast * 40, 0, 255)  # B +cast
-
-    return Image.fromarray(arr.astype(np.uint8))
-
-
 def aug_uneven_fiber_density(img):
     """
-    Simulate uneven fiber density — abaca fibers don't pack perfectly.
-    Some areas are denser (darker, more shadowed), others are sparser
-    (lighter, more surface visible).
-
-    Implemented as a low-frequency brightness map using Perlin-like
-    noise (sum of 2-3 sinusoids at different frequencies and phases),
-    creating blob-like regions of slight over/under exposure across
-    the image — mimicking real fiber bundle density variation.
+    Uneven fiber density via low-frequency brightness blobs.
+    Mean Lab drift=1.36 — low-frequency variation averages out at median.
     """
     arr  = np.array(img, dtype=np.float32)
     h, w = arr.shape[:2]
-
     Y, X = np.mgrid[0:h, 0:w].astype(np.float32)
     density = np.zeros((h, w), dtype=np.float32)
 
-    # Sum 2-3 low-frequency sinusoidal components
     n_waves = random.randint(2, 3)
     for _ in range(n_waves):
-        fx  = random.uniform(0.5, 2.5) / w   # spatial frequency
+        fx  = random.uniform(0.5, 2.5) / w
         fy  = random.uniform(0.5, 2.5) / h
         phi = random.uniform(0, 2 * np.pi)
-        amp = random.uniform(0.04, 0.10)
+        amp = random.uniform(0.03, 0.07)
         density += amp * np.sin(2 * np.pi * (fx * X + fy * Y) + phi)
 
     arr *= (1.0 + density[:, :, np.newaxis])
     return Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8))
 
 
-# ── AUGMENTATION POOL ─────────────────────────────────────────────────────────
-# Two pools:
-# COLOR_AUGS    — change color/brightness/exposure (preserve texture structure)
-# STRUCTURE_AUGS — change texture/spatial structure (preserve color signal)
-# FIBER_AUGS    — new: simulate real abaca-specific visual properties
-COLOR_AUGS        = [aug_brightness, aug_contrast, aug_gamma, aug_shadow,
-                     aug_saturation, aug_exposure_gradient, aug_channel_scale]
-COLOR_WEIGHTS     = [0.18, 0.15, 0.13, 0.12, 0.12, 0.16, 0.14]
+# ── AUGMENTATION POOLS ────────────────────────────────────────────────────────
+COLOR_AUGS     = [aug_brightness, aug_contrast, aug_gamma, aug_shadow,
+                  aug_saturation, aug_exposure_gradient, aug_channel_scale]
+COLOR_WEIGHTS  = [0.18, 0.15, 0.13, 0.12, 0.12, 0.16, 0.14]
 
 STRUCTURE_AUGS    = [aug_noise, aug_rotate, aug_flip, aug_crop,
                      aug_sharpness, aug_blur, aug_jpeg]
 STRUCTURE_WEIGHTS = [0.15, 0.14, 0.12, 0.14, 0.15, 0.15, 0.15]
 
-# Abaca fiber-specific — applied with 60% probability per image
-FIBER_AUGS        = [aug_fiber_strands, aug_fiber_shadow_lines, aug_surface_sheen,
-                     aug_fiber_waviness, aug_circular_vignette, aug_uneven_fiber_density]
-FIBER_WEIGHTS     = [0.22, 0.18, 0.16, 0.14, 0.16, 0.14]
+# Only safe fiber augs — mean Lab drift < 2.0 ΔE each
+FIBER_AUGS    = [aug_fiber_strands, aug_fiber_waviness, aug_uneven_fiber_density]
+FIBER_WEIGHTS = [0.40, 0.30, 0.30]
 
 
 def apply_augmentations(img):
     """
-    Apply augmentations per image in three passes:
+    Two-pass augmentation:
 
-    Pass 1 — Color (max 2 from COLOR group)
-      Simulates lighting, exposure, white-balance variation.
-      Capped at 2 to prevent compounding color drift away from
-      the reference RHS Lab value.
+    Pass 1 — Color + Structure (always applied)
+      Standard lighting/camera variation.
+      Max 2 color augs to prevent compounding color drift.
 
-    Pass 2 — Structure (1 from STRUCTURE group)
-      Simulates camera blur, JPEG compression, rotation.
-      Always at least 1 to ensure structural variety.
-
-    Pass 3 — Fiber texture (0-2 from FIBER group, 60% probability)
-      Simulates abaca-specific visual properties:
-      strand lines, inter-strand shadows, surface sheen,
-      fiber waviness, circular vignette, density variation.
-      Applied AFTER color so the color signal is not distorted
-      by the texture simulation.
-
-    This 3-pass approach means ~60% of training images will have
-    realistic abaca texture simulation, closing the domain gap
-    between the flat RHS card swatches and real fiber photos.
+    Pass 2 — Safe fiber texture (40% probability, 1 aug only)
+      Only augs with mean Lab drift < 2.0 ΔE.
+      Adds realistic fiber texture without corrupting the color signal.
+      60% of images stay as clean color references.
     """
-    cp = np.array(COLOR_WEIGHTS)   / sum(COLOR_WEIGHTS)
+    cp = np.array(COLOR_WEIGHTS)     / sum(COLOR_WEIGHTS)
     sp = np.array(STRUCTURE_WEIGHTS) / sum(STRUCTURE_WEIGHTS)
-    fp = np.array(FIBER_WEIGHTS)   / sum(FIBER_WEIGHTS)
+    fp = np.array(FIBER_WEIGHTS)     / sum(FIBER_WEIGHTS)
 
-    # Pass 1: Color
     color_n, struct_n = (2, 1) if random.random() < 0.6 else (1, 2)
     chosen_color  = np.random.choice(len(COLOR_AUGS),     size=color_n,  replace=False, p=cp)
     chosen_struct = np.random.choice(len(STRUCTURE_AUGS), size=struct_n, replace=False, p=sp)
@@ -374,22 +219,10 @@ def apply_augmentations(img):
     for fn in ops:
         img = fn(img)
 
-    # Pass 2: Fiber texture (applied 60% of the time)
-    # 30% chance: 1 fiber aug — subtle texture hint
-    # 30% chance: 2 fiber augs — fuller texture simulation
-    # 40% chance: no fiber aug — keeps some "clean" examples for robustness
-    r = random.random()
-    if r < 0.30:
-        fiber_n = 1
-    elif r < 0.60:
-        fiber_n = 2
-    else:
-        fiber_n = 0
-
-    if fiber_n > 0:
-        chosen_fiber = np.random.choice(len(FIBER_AUGS), size=fiber_n, replace=False, p=fp)
-        for i in chosen_fiber:
-            img = FIBER_AUGS[i](img)
+    # 40% chance of 1 safe fiber aug
+    if random.random() < 0.40:
+        idx = np.random.choice(len(FIBER_AUGS), p=fp)
+        img = FIBER_AUGS[idx](img)
 
     return img
 
@@ -397,8 +230,6 @@ def apply_augmentations(img):
 # ── WORKER FUNCTION ───────────────────────────────────────────────────────────
 
 def process_color_group(color_data):
-    # Fix: unique reproducible seed per class using class_label hash
-    # Prevents workers from generating identical augmentation sequences
     seed = abs(hash(color_data['class_label'])) % (2**32)
     random.seed(seed)
     np.random.seed(seed)
@@ -450,7 +281,6 @@ def main():
         print(f"ERROR: {SWATCHES_DIR}/ not found — run process_real_photos.py first")
         return
 
-    # Auto-clean augmented/ to prevent stale image mixing on reruns
     if OUT_DIR.exists():
         print(f"  Cleaning old augmented/ folder ...")
         shutil.rmtree(OUT_DIR)
@@ -485,7 +315,6 @@ def main():
                     print(f"  Progress: {processed_count}/{len(colors)} classes "
                           f"(~{len(manifest):,} images)")
 
-    # Write manifest
     fieldnames = ['path', 'rhs_code', 'class_label', 'R', 'G', 'B',
                   'Lab_L', 'Lab_a', 'Lab_b', 'split', 'source']
     with open(MANIFEST_OUT, 'w', newline='', encoding='utf-8') as f:

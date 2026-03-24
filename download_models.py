@@ -1,5 +1,5 @@
 # download_models.py — Abaca Color Scanner
-# Downloads the Quad MLP model files from HF model repo at container startup.
+# Downloads Single MLP model files from HF model repo at container startup.
 # Run automatically before app.py via Dockerfile CMD.
 
 from huggingface_hub import hf_hub_download
@@ -12,9 +12,6 @@ PIPELINE_DIR = Path("abaca_pipeline")
 # ── Files to download (path inside the HF model repo → local destination) ────
 FILES = {
     "abaca_pipeline/model_mlp_a.joblib"   : PIPELINE_DIR / "model_mlp_a.joblib",
-    "abaca_pipeline/model_mlp_b.joblib"   : PIPELINE_DIR / "model_mlp_b.joblib",
-    "abaca_pipeline/model_mlp_c.joblib"   : PIPELINE_DIR / "model_mlp_c.joblib",
-    "abaca_pipeline/model_mlp_d.joblib"   : PIPELINE_DIR / "model_mlp_d.joblib",
     "abaca_pipeline/scaler_knn.joblib"    : PIPELINE_DIR / "scaler_knn.joblib",
     "abaca_pipeline/label_encoder.joblib" : PIPELINE_DIR / "label_encoder.joblib",
     "abaca_pipeline/rhs_colors.csv"       : PIPELINE_DIR / "rhs_colors.csv",

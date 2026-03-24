@@ -2,9 +2,12 @@
         <div id="scanner-guide">
             <div class="scanner-header">
                 <div class="scanner-title">📷 Live Scanner</div>
-                <div class="live-chip">
-                    <div class="live-dot"></div>
-                    READY
+                <div style="display:flex;gap:6px;align-items:center;">
+                    <div id="lighting-chip" style="display:none;font-size:.58rem;font-weight:700;padding:3px 8px;border-radius:99px;background:#e8f5ee;color:#1a8c45;border:1px solid #d0edda;cursor:pointer;" onclick="resetLighting()" title="Tap to reset lighting">💡 AUTO</div>
+                    <div class="live-chip">
+                        <div class="live-dot"></div>
+                        READY
+                    </div>
                 </div>
             </div>
             <div style="display:flex;gap:8px;padding:0 0 14px;">
@@ -48,6 +51,11 @@
                         <div class="dds-item">✨ Glare/shine</div>
                     </div>
                 </div>
+            </div>
+            <div id="lighting-status-bar" style="display:none;margin-top:8px;padding:8px 10px;background:#f0f5f2;border:1px solid #d0edda;border-radius:8px;font-size:.68rem;color:#5a7a65;display:flex;align-items:center;gap:8px;">
+                <span>💡</span>
+                <span id="lighting-status-text">Auto-detecting lighting...</span>
+                <button onclick="resetLighting()" style="margin-left:auto;background:transparent;border:1px solid #d0edda;border-radius:5px;padding:2px 8px;font-size:.62rem;color:#5a7a65;cursor:pointer;">Reset</button>
             </div>
             <input type="file" id="file-cam" accept="image/*" capture="environment" onchange="handleImage(this)"
                    style="display:none;">
@@ -123,7 +131,7 @@
             </div>
             <div id="crop-section-s">
                 <div class="crop-title-s">✂️ Confirm Crop Region</div>
-                <div class="crop-sub-s">Region → Otsu Segment → Quad MLP → ΔE</div>
+                <div class="crop-sub-s">Region → Otsu Segment → MLP → ΔE</div>
                 <div class="crop-pw-s">
                     <canvas id="crop-canvas-s"></canvas>
                 </div>

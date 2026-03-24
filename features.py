@@ -1,7 +1,7 @@
 # features.py  —  Abaca Color Scanner
 # Quad-MLP Ensemble + Foreground-Aware ΔE Matching
 #
-# Architecture : 248-dim features → StandardScaler → Quad MLP Ensemble (876 classes)
+# Architecture : 248-dim features → StandardScaler → Single MLP (876 classes)
 # Scoring      : Primary  = ΔE76 from foreground-masked fiber color (75 %)
 #                Secondary = Quad-MLP ensemble probability (25 %)
 #
@@ -34,10 +34,10 @@ from skimage.filters import gabor
 IMG_SIZE  = 96
 _FEAT_DIM = 248      # verified: scaler.n_features_in_ == 248
 
-# MLP weight — single model, full weight on mlp_a
-# mlp_b/c/d params are kept in predict() signature for backward compatibility
-# with app.py but are ignored when model_type is SingleMLP_v1
-_W_A = 1.0
+# Single MLP — only mlp_a used, weight = 1.0
+# Weights derived from validation accuracy: B(90.69%) > A(90.67%) > C(90.11%) > D(89.69%)
+# FIX: corrected from swapped values (was 0.27/0.28/0.23/0.22) to match model_config.json
+_W_A = 1.0  # Single MLP — only mlp_a used
 
 # Foreground-extraction settings
 _FG_PERCENTILE = 50   # keep bottom 50 % by brightness — more selective, avoids white background leaking into color mean
@@ -343,9 +343,36 @@ class LightingAdapter:
     _MIN_GAIN_L    = 0.60
     _MIN_GAIN_AB   = 0.08   # b* can collapse to near-zero in heavy shade
 
+    _PERSIST_FILE = "abaca_pipeline/lighting_gains.json"
+
     def __init__(self):
         self._samples  = []   # list of (gL, ga, gb)
         self._gains    = None # cached weighted average
+        self._load_persisted()
+
+    def _load_persisted(self):
+        """Load previously learned gains from disk (survives server restarts)."""
+        try:
+            import json
+            from pathlib import Path
+            p = Path(self._PERSIST_FILE)
+            if p.exists():
+                data = json.loads(p.read_text())
+                self._samples = [tuple(s) for s in data.get("samples", [])]
+                self._gains   = None  # will be recomputed on first use
+        except Exception:
+            pass
+
+    def _save_persisted(self):
+        """Persist learned gains to disk."""
+        try:
+            import json
+            from pathlib import Path
+            p = Path(self._PERSIST_FILE)
+            p.parent.mkdir(exist_ok=True)
+            p.write_text(json.dumps({"samples": list(self._samples)}, indent=2))
+        except Exception:
+            pass
 
     def record(self, measured_lab: tuple, correct_code: str,
                colors_db: dict) -> None:
@@ -362,7 +389,11 @@ class LightingAdapter:
         ga = max(self._MIN_GAIN_AB, min(self._MAX_GAIN, ga))
         gb = max(self._MIN_GAIN_AB, min(self._MAX_GAIN, gb))
         self._samples.append((gL, ga, gb))
+        # Keep only last 20 samples — older ones are less relevant
+        if len(self._samples) > 20:
+            self._samples = self._samples[-20:]
         self._gains = None  # invalidate cache
+        self._save_persisted()  # persist to disk
 
     def gains(self) -> tuple:
         """Return (gL, ga, gb) to use for DB transformation."""
@@ -387,18 +418,35 @@ class LightingAdapter:
 
     def auto_detect_gains(self, measured_lab: tuple, colors_db: dict) -> tuple:
         """
-        Find the lighting model that minimises ΔE to the best DB match.
-        Called automatically when no session gains are available yet.
+        Find the lighting model that gives the most confident match.
+
+        Scoring per model:
+          - rank all 876 DB entries under that model
+          - score = de_rank1 / (de_rank2 + 0.1)
+          - lower ratio = #1 match is much better than #2 = more confident
+          - pick the model with the lowest ratio (most unambiguous match)
+
+        This avoids picking a model that gives low DE to a wrong class just
+        because many classes cluster nearby.
         """
-        best_de = float('inf')
-        best_gains = (1.0, 1.0, 1.0)
+        import numpy as np
+
+        best_score  = float('inf')
+        best_gains  = (1.0, 1.0, 1.0)
+
         for gL, ga, gb in _LIGHTING_MODELS:
-            for code, ref in colors_db.items():
-                db_transformed = (ref["L"]*gL, ref["a"]*ga, ref["b"]*gb)
-                de = _delta_e2000(measured_lab, db_transformed)
-                if de < best_de:
-                    best_de = de
-                    best_gains = (gL, ga, gb)
+            des = []
+            for ref in colors_db.values():
+                db_t = (ref["L"]*gL, ref["a"]*ga, ref["b"]*gb)
+                des.append(_delta_e2000(measured_lab, db_t))
+            des.sort()
+            de1, de2 = des[0], des[1] if len(des) > 1 else des[0]
+            # Confidence ratio: low = very confident (big gap between #1 and #2)
+            ratio = de1 / (de2 + 0.1)
+            if ratio < best_score:
+                best_score  = ratio
+                best_gains  = (gL, ga, gb)
+
         return best_gains
 
     def rank_with_lighting(self, measured_lab: tuple, colors_db: dict,
@@ -408,16 +456,19 @@ class LightingAdapter:
         Returns (candidates_sorted, used_gains).
         """
         g = self.gains()
+        self._last_mode = "learned" if g is not None else "auto"
         if g is None:
             g = self.auto_detect_gains(measured_lab, colors_db)
+        self._last_gains = g
 
         candidates = []
         for code, ref in colors_db.items():
             db_lab = self.transform_lab((ref["L"], ref["a"], ref["b"]), g)
             de = _delta_e2000(measured_lab, db_lab)
             mlp_prob = mlp_prob_map.get(code, 0.0)
-            score = 0.95 * float(np.exp(-de / _SCORE_DECAY)) + \
-                    0.05 * float(np.clip(mlp_prob, 0.0, 1.0))
+            _mw   = 0.0 if de < 3.0 else 0.05
+            score = (1.0 - _mw) * float(np.exp(-de / _SCORE_DECAY)) + \
+                    _mw * float(np.clip(mlp_prob, 0.0, 1.0))
             candidates.append((score, de, code, ref["hex"]))
 
         candidates.sort(key=lambda x: x[0], reverse=True)
@@ -434,6 +485,7 @@ class LightingAdapter:
     def reset(self):
         self._samples = []
         self._gains   = None
+        self._save_persisted()  # clear persisted file too
 
 
 # Module-level singleton
@@ -809,7 +861,10 @@ def _combined_score(de: float, mlp_prob: float) -> float:
     """
     de_score  = float(np.exp(-de / _SCORE_DECAY))
     mlp_score = float(np.clip(mlp_prob, 0.0, 1.0))
-    return 0.95 * de_score + 0.05 * mlp_score
+    # When dE < 3.0, color match is unambiguous — trust dE completely
+    # When dE >= 3.0, blend in MLP as tiebreaker only
+    mlp_weight = 0.0 if de < 3.0 else 0.05
+    return (1.0 - mlp_weight) * de_score + mlp_weight * mlp_score
 
 
 def scan_quality_check(img: Image.Image) -> dict:
@@ -884,7 +939,7 @@ def scan_quality_check(img: Image.Image) -> dict:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def predict(img: Image.Image,
-            mlp_a, mlp_b, mlp_c, mlp_d,
+            mlp_a,
             scaler, le,
             colors_db: dict) -> dict:
     """
@@ -958,10 +1013,8 @@ def predict(img: Image.Image,
     feats        = extract_features(feat_src).reshape(1, -1)
     feats_scaled = scaler.transform(feats)
 
-    # ── 4. MLP probability ───────────────────────────────────────────────────
-    # Uses only mlp_a (single model). mlp_b/c/d params accepted for backward
-    # compatibility with app.py but ignored. When mlp_b/c/d are None or the
-    # old quad models, only mlp_a is used — no errors thrown.
+    # ── 4. Quad-MLP weighted ensemble ────────────────────────────────────────
+    # Weights corrected from model_config.json (were swapped: A↔B, C↔D)
     pa = mlp_a.predict_proba(feats_scaled)[0]
     avg_proba = pa  # single model, no blending needed
 

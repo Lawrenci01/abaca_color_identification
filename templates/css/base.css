@@ -53,6 +53,7 @@
             font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
             display: flex;
             flex-direction: column;
+            padding-top: env(safe-area-inset-top);
         }
 
         /* ── TABLET (640-899px) ── */
@@ -68,213 +69,137 @@
             #err-toast { left: 16px; right: 16px; transform: none; width: auto; }
         }
 
-        /* ══════════════════════════════════════════════════════════
-           FIXED CHROME — all chrome is position:fixed.
-           #app is position:fixed filling the viewport below chrome.
-        ══════════════════════════════════════════════════════════ */
-
-        /* Topbar: full width, always at top — z-index above nav(100) */
-        .topbar {
-            position: fixed;
-            top: 0; left: 0; right: 0;
-            z-index: 200;
-        }
-
-        /* Session bar: below topbar, full width on mobile */
-        .session-bar {
-            position: fixed;
-            top: var(--topbar-h);
-            left: 0; right: 0;
-            z-index: 150;
-        }
-
-        /* #app: fixed, fills viewport below chrome */
-        #app {
-            position: fixed;
-            top: calc(var(--topbar-h) + var(--session-h));
-            left: 0; right: 0; bottom: 0;
-            overflow: hidden;
-        }
-
-        /* Admin: session bar hidden → #app starts higher */
-        body.is-admin #app {
-            top: var(--topbar-h);
-        }
-
-        /* ══════════════════════════════════════════════════════════
-           DESKTOP (≥ 900px) — matches wireframe exactly:
-           ┌─────────────────────────────────────────┐
-           │           TOPBAR  (fixed, full width)    │
-           ├──────────┬──────────────────────────────┤
-           │          │  SESSION BAR  (fixed)         │
-           │ SIDEBAR  ├──────────────────────────────┤
-           │ (fixed)  │                               │
-           │  nav     │   CONTENT  (#app, scrollable) │
-           │  items   │                               │
-           │          │                               │
-           └──────────┴──────────────────────────────┘
-        ══════════════════════════════════════════════════════════ */
+        /* ── DESKTOP (≥ 900px) ── */
         @media (min-width: 900px) {
             :root { --sidebar-w: 240px; }
+            body { background: var(--bg2); overflow: hidden; }
 
-            body {
-                background: var(--bg2);
-                overflow: hidden;
-            }
-
-            /* ── TOPBAR: spans full width at top ── */
+            /* ── Topbar: highest z-index so nothing ever overlaps it ── */
             .topbar {
-                left: 0; right: 0;
-                padding: 0 24px;
-                /* z-index:200 already set in base rules */
+                position: fixed;
+                top: 0; left: 0; right: 0;
+                width: 100%; max-width: 100%; transform: none;
+                border-left: none; border-right: none;
+                padding: 0 24px; z-index: 200;
             }
 
-            /* ── SIDEBAR: fixed left strip, full height below topbar ──
-               Starts exactly at topbar bottom, reaches viewport bottom.
-               No scroll — 4 items always fit. */
-            .nav {
+            /* ── Session bar: fixed below topbar, above ALL screen content ──
+               Root cause of scroll-behind: z-index was 39, below scrolling
+               content in #app stacking context. Must be > any .screen content. */
+            .session-bar {
                 position: fixed;
                 top: var(--topbar-h);
-                left: 0;
-                width: var(--sidebar-w);
-                bottom: 0;
-                height: auto;           /* let top+bottom define height */
-                right: auto;
-
-                display: flex;
-                flex-direction: column;
-                justify-content: flex-start;
-                align-items: stretch;
-
-                padding: 16px 0;
-                gap: 2px;
-
-                background: var(--header);
-                border-right: 1px solid var(--border);
-                border-top: none;
-                transform: none;
-
-                z-index: 100;
-                overflow: hidden;       /* no scrollbar ever */
-            }
-
-            /* ── SESSION BAR: fixed, sits right of sidebar, below topbar ── */
-            .session-bar {
-                top: var(--topbar-h);
-                left: var(--sidebar-w);
-                right: 0;
+                left: var(--sidebar-w); right: 0;
+                width: auto; max-width: 100%; transform: none;
                 border-left: 1px solid rgba(255,255,255,.1);
-                /* z-index:150 already set in base rules */
+                border-right: none; z-index: 150;
             }
 
-            /* ── #APP: the scrollable content pane ──
-               Positioned in the exact rectangle that remains:
-               - left edge  = sidebar right edge
-               - top edge   = session bar bottom edge
-               - right/bottom = viewport edges               */
-            #app {
-                top: calc(var(--topbar-h) + var(--session-h));
-                left: var(--sidebar-w);
-                right: 0;
-                bottom: 0;
-                /* position:fixed + overflow:hidden already set in base */
-            }
-
-            /* Admin has no session bar → content pane starts higher */
-            body.is-admin #app {
-                top: var(--topbar-h);
-                left: var(--sidebar-w);
-            }
-
-            /* ── NAV ITEMS: left-aligned rows ── */
-            .nav .nav-item {
-                display: flex;
-                flex-direction: row;
-                justify-content: flex-start;
-                align-items: center;
-                flex: none;
-                gap: 14px;
-                padding: 13px 20px;
-                margin: 1px 10px;
-                border-radius: 10px;
-                width: auto;
-                opacity: 1;
-                cursor: pointer;
-                transition: background .15s, opacity .15s;
-            }
-            .nav .nav-item:not(.active)       { opacity: .65; }
-            .nav .nav-item:not(.active):hover { opacity: 1; background: var(--card2); }
-            .nav .nav-item.active             { background: var(--accent-light); opacity: 1; }
-            .nav .nav-icon  { font-size: 20px; width: 24px; text-align: center; flex-shrink: 0; }
-            .nav .nav-label { font-size: .9rem; font-weight: 600; color: var(--text); text-transform: none; letter-spacing: 0; opacity: 1; }
-            .nav .nav-item.active .nav-label  { color: var(--accent); font-weight: 700; }
-
-            /* Admin sidebar colours */
-            body.is-admin .nav .nav-item:not(.active):hover { background: rgba(255,255,255,.06); }
-            body.is-admin .nav .nav-item.active             { background: rgba(91,164,245,.15); }
-            body.is-admin .nav .nav-label                   { color: rgba(255,255,255,.6); }
-            body.is-admin .nav .nav-item.active .nav-label  { color: #5ba4f5; }
-
-            /* ── SCREENS: each screen fills #app entirely, scrolls inside ── */
-            .screen {
-                position: absolute;
-                top: 0; left: 0; right: 0; bottom: 0;
+            /* ── Sidebar: fixed left, full height ── */
+            .nav {
+                position: fixed;
+                top: var(--topbar-h); left: 0; bottom: 0;
+                width: var(--sidebar-w); height: auto; right: auto;
+                flex-direction: column;
+                justify-content: flex-start; align-items: stretch;
+                padding: 20px 0 24px;
+                border-top: none; border-right: 1px solid var(--border);
+                transform: none; gap: 4px;
+                background: var(--header);
+                z-index: 100;
                 overflow-y: auto;
-                overflow-x: hidden;
-                transform: none;
-                max-width: 100%;
-                padding-bottom: 40px;
-                isolation: isolate;     /* prevents scroll bleed over fixed chrome */
             }
 
-            /* Per-screen content max-widths */
+            /* Nav items — higher specificity (.nav .nav-item) beats global .nav-item */
+            .nav .nav-item {
+                flex: none; flex-direction: row;
+                justify-content: flex-start; align-items: center;
+                gap: 14px; padding: 13px 20px;
+                border-radius: 10px; margin: 2px 10px; opacity: 1;
+                transition: background .15s, opacity .15s;
+                cursor: pointer;
+                display: flex;
+                width: auto;
+            }
+            .nav .nav-item:not(.active) {
+                opacity: .6;
+            }
+            .nav .nav-item:not(.active):hover {
+                opacity: 1;
+                background: var(--card2);
+            }
+            .nav .nav-item.active {
+                background: var(--accent-light);
+                opacity: 1;
+            }
+            .nav .nav-item.active .nav-label { color: var(--accent); }
+            .nav .nav-icon { font-size: 20px; width: 24px; text-align: center; flex-shrink: 0; }
+            .nav .nav-label {
+                font-size: .9rem;
+                text-transform: none;
+                letter-spacing: 0;
+                font-weight: 600;
+                color: var(--text);
+                opacity: 1;
+            }
+            .nav .nav-item.active .nav-label { color: var(--accent); font-weight: 700; }
+
+            /* ── App: offset by sidebar + both fixed bars ── */
+            #app {
+                margin-left: var(--sidebar-w);
+                margin-top: calc(var(--topbar-h) + var(--session-h));
+                width: calc(100% - var(--sidebar-w));
+                height: calc(100vh - var(--topbar-h) - var(--session-h));
+                flex: 1; overflow: hidden; position: relative;
+            }
+
+            /* ── Screens: fill #app, scroll internally ──
+               isolation: isolate creates a new stacking context so
+               scrolling content CANNOT escape and overlap session-bar. */
+            .screen {
+                position: absolute; inset: 0;
+                left: 0; transform: none;
+                max-width: 100%; padding-bottom: 40px;
+                isolation: isolate;
+            }
+
+            /* ── Content max-widths per screen ── */
             #screen-dashboard  { max-width: 920px;  margin: 0 auto; padding: 32px 40px 48px; }
             #screen-scanner    { max-width: 720px;  margin: 0 auto; padding: 24px 0 40px; }
             #screen-history    { max-width: 1000px; margin: 0 auto; }
             #screen-settings   { max-width: 640px;  margin: 0 auto; padding: 32px 32px 48px; }
+
             #screen-admin-dashboard,
             #screen-admin-history,
             #screen-admin-users,
             #screen-admin-settings { max-width: 1100px; margin: 0 auto; padding: 28px 36px 48px; }
 
-            /* ── MODALS ── */
-            #detail-modal       { display: none; align-items: center; justify-content: center; padding: 32px; z-index: 500; }
-            #detail-modal.open  { display: flex; }
-            .dm                 { border-radius: 16px; max-width: 600px; min-height: auto; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,.25); }
-            #cal-modal > div    { max-width: 600px; }
-            #quality-modal      { z-index: 500; }
+            #detail-modal { display: none; align-items: center; justify-content: center; padding: 32px; z-index: 500; }
+            #detail-modal.open { display: flex; }
+            .dm { border-radius: 16px; max-width: 600px; min-height: auto; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,.25); }
+            #cal-modal > div { max-width: 600px; }
+            #quality-modal { z-index: 500; }
 
-            /* ── TOASTS ── */
             #err-toast { left: calc(var(--sidebar-w) + 16px); right: 16px; width: auto; transform: none; bottom: 24px; }
             #loc-toast { left: calc(var(--sidebar-w) + 16px); right: 16px; top: calc(var(--topbar-h) + var(--session-h) + 12px); z-index: 149; }
 
-            /* ── SCREEN-SPECIFIC PADDING OVERRIDES ── */
-            /* History */
-            #screen-history .history-search        { padding: 14px 28px; }
-            #screen-history .filter-bar            { padding: 10px 28px; }
-            #screen-history .hist-stats-row        { padding: 12px 28px; }
-            #screen-history .history-list          { padding: 0 28px 16px; }
-            #screen-history .active-filter-banner  { padding: 7px 28px; }
+            /* ── History screen internal padding ── */
+            #screen-history .history-search  { padding: 14px 28px; }
+            #screen-history .filter-bar      { padding: 10px 28px; }
+            #screen-history .hist-stats-row  { padding: 12px 28px; }
+            #screen-history .history-list    { padding: 0 28px 16px; }
 
-            /* Dashboard */
-            .dash-greeting          { font-size: 1.4rem; }
-            .dash-header            { padding: 28px 32px 0; }
-            .summary-card           { margin: 16px 32px 0; }
-            .avg-grade-banner       { margin: 12px 32px 0; }
-            .start-scan-btn         { margin: 14px 32px 0; width: calc(100% - 64px); }
-            .recent-header          { padding: 20px 32px 10px; }
-            #screen-dashboard .card { margin: 0 32px !important; }
-            .sum-num                { font-size: 2.2rem; }
+            /* ── Dashboard greeting larger on desktop ── */
+            .dash-greeting { font-size: 1.4rem; }
 
-            /* Settings */
-            .settings-section { padding: 16px 32px 0; }
-            .settings-btn     { margin: 8px 32px; width: calc(100% - 64px); }
-
-            /* ── SCROLLBARS: thin and subtle ── */
+            /* ── Styled thin scrollbars ── */
             .screen::-webkit-scrollbar       { width: 5px; }
             .screen::-webkit-scrollbar-track { background: transparent; }
             .screen::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
             .screen::-webkit-scrollbar-thumb:hover { background: var(--sub); }
+
+            /* ── Screen padding: no mobile bottom nav on desktop ── */
+            .screen { padding-bottom: 40px; }
         }
 
 
@@ -289,7 +214,8 @@
             align-items: center;
             justify-content: space-between;
             padding: 0 16px;
-            height: var(--topbar-h);
+            padding-top: env(safe-area-inset-top);
+            height: calc(var(--topbar-h) + env(safe-area-inset-top));
             background: var(--header);
             border-bottom: 1px solid var(--border);
             flex-shrink: 0;
@@ -610,10 +536,9 @@
         }
 
         #app {
-            position: fixed;
-            top: calc(var(--topbar-h) + var(--session-h));
-            left: 0; right: 0; bottom: 0;
+            flex: 1;
             overflow: hidden;
+            position: relative;
         }
 
         .screen {

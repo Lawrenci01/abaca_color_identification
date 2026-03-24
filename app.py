@@ -45,7 +45,6 @@ def check_rate_limit(ip):
 def load_models():
     import csv
 
-    # Only mlp_a is required — b/c/d are optional (kept for backward compat)
     required = [
         PIPELINE_DIR / "model_mlp_a.joblib",
         PIPELINE_DIR / "scaler_knn.joblib",
@@ -56,25 +55,11 @@ def load_models():
     if missing:
         raise FileNotFoundError(f"Missing model files: {missing}")
 
-    mlp_a = joblib.load(PIPELINE_DIR / "model_mlp_a.joblib")
-
-    # Load b/c/d only if they exist — not required for single-MLP mode
-    def _load_optional(path):
-        return joblib.load(path) if path.exists() else None
-
-    mlp_b = _load_optional(PIPELINE_DIR / "model_mlp_b.joblib")
-    mlp_c = _load_optional(PIPELINE_DIR / "model_mlp_c.joblib")
-    mlp_d = _load_optional(PIPELINE_DIR / "model_mlp_d.joblib")
-
+    mlp_a  = joblib.load(PIPELINE_DIR / "model_mlp_a.joblib")
     scaler = joblib.load(PIPELINE_DIR / "scaler_knn.joblib")
     le     = joblib.load(PIPELINE_DIR / "label_encoder.joblib")
 
-    # Log what was loaded
-    loaded = ["mlp_a"]
-    if mlp_b: loaded.append("mlp_b")
-    if mlp_c: loaded.append("mlp_c")
-    if mlp_d: loaded.append("mlp_d")
-    print(f"  Models loaded: {', '.join(loaded)}")
+    print(f"  Models loaded: mlp_a (SingleMLP_v1)")
 
     colors_db = {}
     with open(PIPELINE_DIR / "rhs_colors.csv") as f:
@@ -88,15 +73,15 @@ def load_models():
                 ),
             }
 
-    return mlp_a, mlp_b, mlp_c, mlp_d, scaler, le, colors_db
+    return mlp_a, scaler, le, colors_db
 
 
 try:
-    mlp_a, mlp_b, mlp_c, mlp_d, scaler, le, colors_db = load_models()
+    mlp_a, scaler, le, colors_db = load_models()
     print("✅ Models loaded successfully")
 except Exception as e:
     print(f"⚠️  Model load failed: {e}")
-    mlp_a = mlp_b = mlp_c = mlp_d = scaler = le = colors_db = None
+    mlp_a = scaler = le = colors_db = None
 
 from features import predict
 
@@ -159,7 +144,6 @@ def api_scans():
     user_id = request.args.get("user_id")
     scans = get_db().get_scans(user_id=user_id)
 
-    # compute stats
     import datetime
     today = datetime.datetime.now(datetime.timezone.utc).date().isoformat()
     today_scans = [s for s in scans if s.get("scanned_at", "").startswith(today)]
@@ -186,10 +170,6 @@ def api_save():
         return jsonify({"error": "No data provided"}), 400
     scan_id = get_db().save_scan(data)
 
-    # ── Illuminant correction learning ────────────────────────────────────────
-    # Every time a grader saves a verified scan, feed it to the illuminant
-    # corrector so subsequent scans in the same session benefit from the
-    # learned lighting offset.
     try:
         from features import record_grader_confirmation
         dom_lab = data.get("dominant_lab") or {}
@@ -204,18 +184,13 @@ def api_save():
                 colors_db        = colors_db,
             )
     except Exception:
-        pass  # never block save on correction failure
+        pass
 
     return jsonify({"scan_id": scan_id, "ok": True})
 
 
 @app.route("/api/reset-illuminant", methods=["POST"])
 def api_reset_illuminant():
-    """
-    Reset the session illuminant correction.
-    Call when the grader moves to a new lighting environment.
-    The frontend can expose this as a "New lighting condition" button.
-    """
     try:
         from features import reset_illuminant_correction
         reset_illuminant_correction()
@@ -223,6 +198,36 @@ def api_reset_illuminant():
         pass
     return jsonify({"ok": True, "message": "Illuminant correction reset."})
 
+
+@app.route("/api/lighting", methods=["GET"])
+def api_lighting():
+    """Return current lighting adapter status — shown in scanner UI."""
+    try:
+        from features import _lighting_adapter
+        gains = _lighting_adapter.gains()
+        return jsonify({
+            "ok":      True,
+            "mode":    "learned" if gains is not None else "auto",
+            "samples": _lighting_adapter.sample_count,
+            "gains":   {
+                "L": round(gains[0], 3),
+                "a": round(gains[1], 3),
+                "b": round(gains[2], 3),
+            } if gains else None,
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)})
+
+
+@app.route("/api/lighting/reset", methods=["POST"])
+def api_lighting_reset():
+    """Reset lighting adapter — call when moving to a new location/lighting."""
+    try:
+        from features import _lighting_adapter
+        _lighting_adapter.reset()
+        return jsonify({"ok": True, "message": "Lighting adapter reset."})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)})
 
 
 @app.route("/api/stats")
@@ -295,23 +300,24 @@ def delete_user(user_id):
 @app.route("/api/admin/retrain", methods=["POST"])
 def api_admin_retrain():
     """
-    Full retrain pipeline using verified scans from Supabase.
+    Retrain Single MLP (mlp_a only) using verified scans from Supabase.
 
     Flow:
       1. Fetch all verified scans from DB
       2. Synthesize fiber swatch images from their dominant_rgb values
       3. Load existing augmented manifest (swatch training data)
       4. Append verified scans as additional training samples
-      5. Retrain Quad MLP ensemble (4 models: a, b, c, d)
-      6. Hot-reload models into memory (no restart needed)
+      5. Retrain Single MLP (mlp_a only)
+      6. Hot-reload model into memory (no restart needed)
       7. Return accuracy report
     """
-    import threading, csv, time, random, traceback
+    import csv, time, random, traceback
     import numpy as np
     from PIL import Image, ImageFilter
     from sklearn.neural_network import MLPClassifier
     from sklearn.preprocessing import LabelEncoder, StandardScaler
     from features import extract_features
+    from db import get_db
 
     # ── 1. Fetch verified scans ───────────────────────────────────────────────
     try:
@@ -346,10 +352,8 @@ def api_admin_retrain():
 
     # ── 3. Synthesize swatch images from verified scan RGB values ─────────────
     def make_fiber_swatch(r, g, b, size=96):
-        """Synthesize a realistic fiber swatch patch from an RGB value."""
         rng = random.Random(r * 1000 + g * 100 + b)
         arr = np.full((size, size, 3), [r, g, b], dtype=np.float32)
-        # Add fiber strand texture (vertical brightness variation)
         for _ in range(rng.randint(8, 16)):
             x = rng.randint(0, size - 1)
             brightness = rng.uniform(0.88, 1.12)
@@ -357,7 +361,6 @@ def api_admin_retrain():
             for dx in range(w):
                 col = min(x + dx, size - 1)
                 arr[:, col] = np.clip(arr[:, col] * brightness, 0, 255)
-        # Add subtle noise
         noise = np.random.default_rng(r + g + b).normal(0, 2.5, arr.shape)
         arr = np.clip(arr + noise, 0, 255)
         img = Image.fromarray(arr.astype(np.uint8), mode='RGB')
@@ -378,7 +381,7 @@ def api_admin_retrain():
     except Exception as e:
         return jsonify({"ok": False, "message": f"Manifest read error: {e}"}), 500
 
-    # ── 5. Extract features from all training data ────────────────────────────
+    # ── 5. Extract features ───────────────────────────────────────────────────
     t_start = time.time()
     X, y_codes = [], []
     errors = 0
@@ -394,7 +397,6 @@ def api_admin_retrain():
         except Exception:
             errors += 1
 
-    # Inject verified real-world scans (augmented 3× for weight)
     injected = 0
     for s in verified:
         rgb = s.get("dominant_rgb", {})
@@ -406,17 +408,11 @@ def api_admin_retrain():
             continue
         grade = grade.strip().upper()
         try:
-            swatch = make_fiber_swatch(r, g, b)
-            feat = extract_features(swatch)
-            # Add 3 slightly varied versions for better generalization
             for jitter in [(0, 0, 0), (3, -2, 2), (-2, 3, -3)]:
-                jr, jg, jb = (
-                    min(255, max(0, r + jitter[0])),
-                    min(255, max(0, g + jitter[1])),
-                    min(255, max(0, b + jitter[2]))
-                )
-                swatch_j = make_fiber_swatch(jr, jg, jb)
-                X.append(extract_features(swatch_j))
+                jr = min(255, max(0, r + jitter[0]))
+                jg = min(255, max(0, g + jitter[1]))
+                jb = min(255, max(0, b + jitter[2]))
+                X.append(extract_features(make_fiber_swatch(jr, jg, jb)))
                 y_codes.append(grade)
             injected += 1
         except Exception:
@@ -427,60 +423,42 @@ def api_admin_retrain():
 
     X = np.array(X, dtype=np.float32)
 
-    # ── 6. Fit scaler + Quad MLP ────────────────────────────────────────────
+    # ── 6. Fit scaler + Single MLP ────────────────────────────────────────────
     try:
-        le = LabelEncoder()
-        y_int = le.fit_transform(y_codes)
+        new_le = LabelEncoder()
+        y_int = new_le.fit_transform(y_codes)
 
-        scaler = StandardScaler()
-        X_scaled = scaler.fit_transform(X)
+        new_scaler = StandardScaler()
+        X_scaled = new_scaler.fit_transform(X)
 
-        def build_mlp(seed, layer_sizes, activation='relu', alpha=0.001):
-            return MLPClassifier(
-                hidden_layer_sizes=layer_sizes,
-                activation=activation, solver='adam', alpha=alpha,
-                batch_size=256, learning_rate='adaptive', learning_rate_init=0.001,
-                max_iter=500, tol=1e-4, random_state=seed, verbose=False,
-                early_stopping=True, validation_fraction=0.1, n_iter_no_change=30,
-            )
+        new_mlp_a = MLPClassifier(
+            hidden_layer_sizes=(1024, 768, 512, 256),
+            activation='relu', solver='adam', alpha=0.001,
+            batch_size=256, learning_rate='adaptive', learning_rate_init=0.001,
+            max_iter=500, tol=1e-4, random_state=42, verbose=False,
+            early_stopping=True, validation_fraction=0.1, n_iter_no_change=30,
+        )
+        new_mlp_a.fit(X_scaled, y_int)
+        acc_a = round((new_mlp_a.predict(X_scaled) == y_int).mean() * 100, 2)
 
-        mlp_configs = [
-            (42, 'a', (1024, 768, 512, 256), 'relu', 0.001),
-            (7, 'b', (1024, 1024), 'relu', 0.001),
-            (123, 'c', (512, 512, 512), 'tanh', 0.0005),
-            (999, 'd', (768, 512, 384, 256), 'relu', 0.001),
-        ]
-
-        results = {}
-        for seed, label, layers, activation, alpha in mlp_configs:
-            mlp = build_mlp(seed, layers, activation, alpha)
-            mlp.fit(X_scaled, y_int)
-            acc = (mlp.predict(X_scaled) == y_int).mean()
-            results[label] = (mlp, round(acc * 100, 2))
-
-    except Exception as e:
+    except Exception:
         return jsonify({"ok": False, "message": f"Training error: {traceback.format_exc()}"}), 500
 
-    # ── 7. Save models ────────────────────────────────────────────────────────
+    # ── 7. Save model ─────────────────────────────────────────────────────────
     try:
-        for label in ['a', 'b', 'c', 'd']:
-            joblib.dump(results[label][0], PIPELINE_DIR / f"model_mlp_{label}.joblib", compress=3)
-        joblib.dump(scaler, PIPELINE_DIR / "scaler_knn.joblib", compress=3)
-        joblib.dump(le, PIPELINE_DIR / "label_encoder.joblib", compress=3)
+        joblib.dump(new_mlp_a,    PIPELINE_DIR / "model_mlp_a.joblib", compress=3)
+        joblib.dump(new_scaler,   PIPELINE_DIR / "scaler_knn.joblib",  compress=3)
+        joblib.dump(new_le,       PIPELINE_DIR / "label_encoder.joblib", compress=3)
     except Exception as e:
         return jsonify({"ok": False, "message": f"Save error: {e}"}), 500
 
-    # ── 8. Hot-reload into live memory (no restart needed) ───────────────────
-    global mlp_a, mlp_b, mlp_c, mlp_d
+    # ── 8. Hot-reload into live memory ────────────────────────────────────────
+    global mlp_a
     try:
-        mlp_a = results['a'][0]
-        mlp_b = results['b'][0]
-        mlp_c = results['c'][0]
-        mlp_d = results['d'][0]
-        # Reload scaler and le via the features module's predict function
+        mlp_a = new_mlp_a
         import features as _feat_mod
-        _feat_mod._loaded_scaler = scaler
-        _feat_mod._loaded_le = le
+        _feat_mod._loaded_scaler = new_scaler
+        _feat_mod._loaded_le     = new_le
     except Exception:
         pass
 
@@ -488,29 +466,22 @@ def api_admin_retrain():
 
     return jsonify({
         "ok": True,
-        "message": "Retraining complete. Quad MLP models updated live.",
+        "message": "Retraining complete. Single MLP (mlp_a) updated live.",
         "verified_count": len(verified),
         "injected_scans": injected,
         "swatch_samples": len(train_rows) - errors,
         "total_training_samples": len(X),
         "skipped_errors": errors,
-        "mlp_a_accuracy": results['a'][1],
-        "mlp_b_accuracy": results['b'][1],
-        "mlp_c_accuracy": results['c'][1],
-        "mlp_d_accuracy": results['d'][1],
+        "mlp_a_accuracy": acc_a,
         "elapsed_seconds": elapsed,
-        "classes": len(le.classes_),
+        "classes": len(new_le.classes_),
         "top_misclassifications": [{"pattern": k, "count": v} for k, v in top_errors],
-        "note": "Models hot-reloaded — no restart needed."
+        "note": "Model hot-reloaded — no restart needed."
     })
 
 
 @app.route("/api/admin/retrain/export", methods=["POST"])
 def api_retrain_export():
-    """
-    Generate a downloadable PDF/CSV retrain report from the provided retrain result JSON.
-    Accepts the retrain result as JSON body, returns a CSV file.
-    """
     import csv, io as _io, datetime
     from flask import make_response
 
@@ -520,41 +491,24 @@ def api_retrain_export():
     buf = _io.StringIO()
     w = csv.writer(buf)
 
-    # Header
     w.writerow(["Abaca Scanner — Model Retrain Report"])
     w.writerow(["Generated", now])
     w.writerow([])
-
-    # Summary
     w.writerow(["SUMMARY"])
     w.writerow(["Metric", "Value"])
-    w.writerow(["Verified Scans Used", data.get("verified_count", "—")])
-    w.writerow(["Real Scans Injected", data.get("injected_scans", "—")])
-    w.writerow(["Swatch Samples", data.get("swatch_samples", "—")])
-    w.writerow(["Total Training Samples", data.get("total_training_samples", "—")])
-    w.writerow(["Skipped (errors)", data.get("skipped_errors", "—")])
-    w.writerow(["RHS Classes", data.get("classes", "—")])
-    w.writerow(["Training Time (seconds)", data.get("elapsed_seconds", "—")])
+    w.writerow(["Verified Scans Used",      data.get("verified_count", "—")])
+    w.writerow(["Real Scans Injected",       data.get("injected_scans", "—")])
+    w.writerow(["Swatch Samples",            data.get("swatch_samples", "—")])
+    w.writerow(["Total Training Samples",    data.get("total_training_samples", "—")])
+    w.writerow(["Skipped (errors)",          data.get("skipped_errors", "—")])
+    w.writerow(["RHS Classes",               data.get("classes", "—")])
+    w.writerow(["Training Time (seconds)",   data.get("elapsed_seconds", "—")])
     w.writerow([])
-
-    # Accuracy
     w.writerow(["MODEL ACCURACY"])
     w.writerow(["Model", "Train Accuracy (%)"])
-    w.writerow(["MLP-A", data.get("mlp_a_accuracy", "—")])
-    w.writerow(["MLP-B", data.get("mlp_b_accuracy", "—")])
-    w.writerow(["MLP-C", data.get("mlp_c_accuracy", "—")])
-    w.writerow(["MLP-D", data.get("mlp_d_accuracy", "—")])
-    avg = None
-    try:
-        avg = round(
-            (data["mlp_a_accuracy"] + data["mlp_b_accuracy"] + data["mlp_c_accuracy"] + data["mlp_d_accuracy"]) / 4, 2)
-    except Exception:
-        pass
-    if avg:
-        w.writerow(["Ensemble Average", avg])
+    w.writerow(["MLP-A (SingleMLP_v1)", data.get("mlp_a_accuracy", "—")])
     w.writerow([])
 
-    # Top misclassifications
     errors = data.get("top_misclassifications", [])
     if errors:
         w.writerow(["TOP GRADE CORRECTIONS APPLIED"])
@@ -586,7 +540,6 @@ def predict_route():
         return jsonify({"error": "Rate limit exceeded. Try again in a minute."}), 429
 
     try:
-        # Support both raw bytes and multipart form
         if request.content_type and "multipart" in request.content_type:
             f = request.files.get("image")
             if not f:
@@ -599,24 +552,17 @@ def predict_route():
 
         img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
 
-        # ── Scan quality gate ────────────────────────────────────────────────
-        # Checks for hard technical failures (overexposed, too dark, no color).
-        # Does NOT try to detect "not abaca" — that's not reliably possible.
-        # Soft warnings are passed through so the UI can show them.
         from features import scan_quality_check
         quality = scan_quality_check(img)
         if not quality["scannable"]:
             return jsonify({
-                "error":        "unscannable",
-                "warnings":     quality["warnings"],
-                "mean_lum":     quality["mean_lum"],
-                "mean_sat":     quality["mean_sat"],
-                "scannable":    False,
+                "error":     "unscannable",
+                "warnings":  quality["warnings"],
+                "mean_lum":  quality["mean_lum"],
+                "mean_sat":  quality["mean_sat"],
+                "scannable": False,
             }), 422
 
-        # ── White balance correction ─────────────────────────────────────
-        # Priority 1: use gains provided by client (from calibration card)
-        # Priority 2: auto-detect and correct warm/red/cool cast from image
         wb_applied = False
         try:
             wb_r = request.form.get("wb_r")
@@ -634,23 +580,14 @@ def predict_route():
         except (ValueError, TypeError):
             pass
 
-        # ── Auto WB: correct neutral-scene casts but skip colored fiber ────────
-        # CRITICAL: do NOT apply gray-world WB to red/purple-dominant images.
-        # Abaca fiber in RHS groups 44–73 (red, red-purple) will have mean_R
-        # well above mean_G and mean_B — this IS the fiber color, not a camera
-        # cast.  Correcting it desaturates the fiber and shifts Lab toward dark
-        # neutral codes (187A, N187A), causing systematic mis-grading.
         if not wb_applied:
             try:
                 arr = np.array(img, dtype=np.float32)
-                mean_r = arr[:, :, 0].mean()
-                mean_g = arr[:, :, 1].mean()
-                mean_b = arr[:, :, 2].mean()
+                mean_r   = arr[:, :, 0].mean()
+                mean_g   = arr[:, :, 1].mean()
+                mean_b   = arr[:, :, 2].mean()
                 mean_all = (mean_r + mean_g + mean_b) / 3.0
 
-                # Skip WB when fiber color dominates:
-                # Red fiber:    R leads both G and B by > 25 units
-                # Purple fiber: both R and B lead G (R>G, B>G)
                 red_dominant    = (mean_r - mean_g) > 25 and (mean_r - mean_b) > 25
                 purple_dominant = (mean_r > mean_g + 10) and (mean_b > mean_g + 5)
 
@@ -669,10 +606,10 @@ def predict_route():
                         img = Image.fromarray(arr.astype(np.uint8))
                         wb_applied = True
             except Exception:
-                pass  # Never block prediction on WB failure
+                pass
 
-        result = predict(img, mlp_a, mlp_b, mlp_c, mlp_d, scaler, le, colors_db)
-        result["wb_applied"] = wb_applied
+        result = predict(img, mlp_a, scaler, le, colors_db)
+        result["wb_applied"]   = wb_applied
         result["scan_warnings"] = quality.get("warnings", [])
         result["scan_quality"]  = {
             "mean_lum": quality["mean_lum"],
@@ -680,55 +617,49 @@ def predict_route():
             "lum_std":  quality["lum_std"],
         }
 
-        # Sanitize all numeric fields so JS .toFixed() never crashes on null/undefined
         def _f(v, default=0.0):
             try:
                 return round(float(v), 4)
             except:
                 return default
 
-        result["delta_e"] = _f(result.get("delta_e"), 0.0)
-        result["match_score"] = _f(result.get("match_score"), 0.0)
+        result["delta_e"]      = _f(result.get("delta_e"), 0.0)
+        result["match_score"]  = _f(result.get("match_score"), 0.0)
         result["dominant_hex"] = result.get("dominant_hex") or "#888888"
-        result["matched_hex"] = result.get("matched_hex") or "#888888"
-        result["rhs_code"] = result.get("rhs_code") or result.get("rhs_grade") or "—"
-        result["verdict"] = result.get("verdict") or "Unknown"
+        result["matched_hex"]  = result.get("matched_hex") or "#888888"
+        result["rhs_code"]     = result.get("rhs_code") or result.get("rhs_grade") or "—"
+        result["verdict"]      = result.get("verdict") or "Unknown"
         result["verdict_color"] = result.get("verdict_color") or "#888888"
         result["dominant_rgb"] = result.get("dominant_rgb") or {"R": 0, "G": 0, "B": 0}
         result["dominant_lab"] = result.get("dominant_lab") or {"L": 0, "a": 0, "b": 0}
-        result["seg_found"] = bool(result.get("seg_found", False))
+        result["seg_found"]    = bool(result.get("seg_found", False))
         result["seg_coverage"] = _f(result.get("seg_coverage"), 0.0)
-        result["wb_applied"] = bool(result.get("wb_applied", False))
+        result["wb_applied"]   = bool(result.get("wb_applied", False))
 
-        # Normalize top_5 — features.py may use different key names
         top5_raw = result.get("top_5") or result.get("top5") or []
         top5_norm = []
         for t in top5_raw:
-            # rhs_code may come as "code", "rhs_code", "label", "class"
             rhs = (t.get("rhs_code") or t.get("code") or
                    t.get("label") or t.get("class") or
                    t.get("rhs_grade") or "—")
-            # delta_e may come as "delta_e", "de", "deltaE", "distance"
             de_val = (t.get("delta_e") or t.get("de") or
                       t.get("deltaE") or t.get("distance") or 0.0)
-            # match_score may come as "match_score", "score", "confidence", "prob"
             sc_val = (t.get("match_score") or t.get("score") or
                       t.get("confidence") or t.get("prob") or 0.0)
             de_f = _f(de_val, 0.0)
             sc_f = _f(sc_val, 0.0)
-            # color coding for delta-e
             de_color = ("#1a8c45" if de_f < 2 else
                         "#c47c00" if de_f < 5 else "#c0001a")
             de_label = ("Excellent" if de_f < 2 else
-                        "Good" if de_f < 5 else
-                        "Fair" if de_f < 10 else "Poor")
+                        "Good"      if de_f < 5 else
+                        "Fair"      if de_f < 10 else "Poor")
             top5_norm.append({
-                "rhs_code": rhs,
-                "delta_e": de_f,
+                "rhs_code":    rhs,
+                "delta_e":     de_f,
                 "match_score": sc_f,
-                "hex": t.get("hex") or t.get("color") or "#888888",
-                "de_color": t.get("de_color") or de_color,
-                "de_label": t.get("de_label") or de_label,
+                "hex":         t.get("hex") or t.get("color") or "#888888",
+                "de_color":    t.get("de_color") or de_color,
+                "de_label":    t.get("de_label") or de_label,
             })
         result["top_5"] = top5_norm
 
@@ -744,9 +675,10 @@ def health():
     from db import get_db
     db = get_db()
     return jsonify({
-        "status": "ok",
+        "status":        "ok",
         "models_loaded": mlp_a is not None,
-        "supabase": db._supabase is not None,
+        "model_type":    "SingleMLP_v1",
+        "supabase":      db._supabase is not None,
     })
 
 

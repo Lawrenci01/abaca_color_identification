@@ -1,7 +1,7 @@
 {
   "feature_size": 248,
   "swatch_size": 96,
-  "model_type": "QuadMLP_ensemble_v2",
+  "model_type": "SingleMLP_v1",
   "n_classes": 876,
   "class_labels": [
     "BLACK_202A",
@@ -881,29 +881,15 @@
     "YELLOW_9C",
     "YELLOW_9D"
   ],
-  "ensemble_weights": {
-    "mlp_a": 0.28,
-    "mlp_b": 0.27,
-    "mlp_c": 0.22,
-    "mlp_d": 0.23
-  },
-  "mlp_a_architecture": "248->1024->768->512->256->876",
-  "mlp_b_architecture": "248->1024->1024->876",
-  "mlp_c_architecture": "248->512->512->512->876",
-  "mlp_d_architecture": "248->768->512->384->256->876",
-  "seeds": {
-    "mlp_a": 42,
-    "mlp_b": 7,
-    "mlp_c": 123,
-    "mlp_d": 999
-  },
+  "architecture": "248->1024->768->512->876",
+  "mlp_a_architecture": "248->1024->768->512->876",
+  "seed": 42,
+  "activation": "relu",
+  "alpha": 0.001,
   "training_samples": 868116,
-  "mlp_a_train_accuracy": 95.54,
-  "mlp_b_train_accuracy": 97.43,
-  "mlp_c_train_accuracy": 93.76,
-  "mlp_d_train_accuracy": 94.51,
-  "mlp_a_val_accuracy": 90.67,
-  "mlp_b_val_accuracy": 90.69,
-  "mlp_c_val_accuracy": 90.11,
-  "mlp_d_val_accuracy": 89.69
+  "mlp_a_train_accuracy": 95.34,
+  "mlp_a_val_accuracy": 87.15,
+  "ensemble_weights": {
+    "mlp_a": 1.0
+  }
 }

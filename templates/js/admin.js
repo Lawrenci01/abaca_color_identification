@@ -531,11 +531,13 @@ async function admLoadSettings(){
     document.getElementById('adm-sys-users').textContent=users.length+' registered graders';
     document.getElementById('adm-sys-badge').textContent=users.length;
 
-    // Check health
+    // Check health + show model accuracy
     const health=await fetch('/health').then(r=>r.json()).catch(()=>null);
     if(health){
       const dbBadge=document.getElementById('adm-db-badge');
       if(dbBadge){dbBadge.textContent=health.supabase?'✅ Supabase':'SQLite only';dbBadge.className='admin-sr-badge'+(health.supabase?' ok':'');}
+      const accEl=document.getElementById('adm-model-accuracy');
+      if(accEl){accEl.textContent=health.val_accuracy?health.val_accuracy+'%':'—';}
     }
   }catch(e){console.error('Admin settings load failed',e);}
 }
@@ -562,9 +564,7 @@ async function admTriggerRetrain(){
 
     // ── Build retrain report ─────────────────────────────────────────
     const maxC = d.top_misclassifications && d.top_misclassifications.length ? d.top_misclassifications[0].count : 1;
-    const avgAcc = d.mlp_a_accuracy && d.mlp_b_accuracy && d.mlp_c_accuracy && d.mlp_d_accuracy
-      ? ((d.mlp_a_accuracy + d.mlp_b_accuracy + d.mlp_c_accuracy + d.mlp_d_accuracy) / 4).toFixed(2)
-      : '—';
+    const avgAcc = d.mlp_a_accuracy ? d.mlp_a_accuracy.toFixed(2) : '—';
 
     const errorsHtml = d.top_misclassifications && d.top_misclassifications.length
       ? `<div style="font-size:.6rem;color:rgba(255,255,255,.4);margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em;font-weight:700;">Top Grade Corrections Applied</div>`
@@ -618,19 +618,12 @@ async function admTriggerRetrain(){
         </div>
       </div>
 
-      <!-- MLP accuracy — all 4 models + ensemble avg -->
+      <!-- MLP accuracy — Single MLP -->
       <div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:9px;padding:10px;margin-bottom:10px;">
         <div style="font-size:.55rem;text-transform:uppercase;letter-spacing:.08em;color:rgba(255,255,255,.4);margin-bottom:8px;font-weight:700;">Model Accuracy (Train Set)</div>
-        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:8px;">
-          ${['a','b','c','d'].map(m=>`
-            <div style="text-align:center;">
-              <div style="font-size:1rem;font-weight:800;color:#4ade80;font-family:IBM Plex Mono,monospace;">${d['mlp_'+m+'_accuracy']||'—'}%</div>
-              <div style="font-size:.5rem;color:rgba(255,255,255,.35);margin-top:2px;text-transform:uppercase;">MLP-${m.toUpperCase()}</div>
-            </div>`).join('')}
-        </div>
-        <div style="border-top:1px solid rgba(255,255,255,.08);padding-top:8px;display:flex;align-items:center;justify-content:space-between;">
-          <div style="font-size:.58rem;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:.06em;">Ensemble Average</div>
-          <div style="font-size:1.1rem;font-weight:800;color:#5ba4f5;font-family:IBM Plex Mono,monospace;">${avgAcc}%</div>
+        <div style="text-align:center;padding:6px 0;">
+          <div style="font-size:1.4rem;font-weight:800;color:#4ade80;font-family:IBM Plex Mono,monospace;">${d.mlp_a_accuracy||'—'}%</div>
+          <div style="font-size:.52rem;color:rgba(255,255,255,.35);margin-top:3px;text-transform:uppercase;">Single MLP (mlp_a)</div>
         </div>
       </div>
 

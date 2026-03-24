@@ -1,6 +1,6 @@
 ==================================================================
   ABACA FIBER COLOR IDENTIFICATION — EVALUATION REPORT
-  Ensemble: MLP-A(0.28) + MLP-B(0.27) + MLP-C(0.22) + MLP-D(0.23)
+  Model: Single MLP  Architecture: 248->1024->768->512->876
   Features: 248 dims  |  Classes: 876
 ==================================================================
 
@@ -12,54 +12,49 @@ DATASET SUMMARY
 ==================================================================
 ACCURACY
 ==================================================================
-  MLP-A (individual)     : 90.84%
-  MLP-B (individual)     : 90.54%
-  MLP-C (individual)     : 89.83%
-  MLP-D (individual)     : 89.19%
-  Ensemble (A+B+C+D)     : 93.82%
-  Top-3 Accuracy         : 99.27%
-  Top-5 Accuracy         : 99.66%
-  Target                 : 89.00%
-  Gap to target          : 0.00%
+  MLP-A accuracy         : 87.90%
+  Top-3 Accuracy         : 97.49%
+  Top-5 Accuracy         : 98.72%
+  Goal (Top-5 >= 90%)    : MET ✅ (98.72%)
 
 ==================================================================
 CLASSIFICATION METRICS  (macro-averaged across all 876 classes)
 ==================================================================
-  Precision              : 0.9415  (94.15%)
-  Recall                 : 0.9382  (93.82%)
-  F1 Score               : 0.9374  (93.74%)
+  Precision              : 0.8852  (88.52%)
+  Recall                 : 0.8790  (87.90%)
+  F1 Score               : 0.8770  (87.70%)
 
 ==================================================================
 DELTA-E  (perceptual color distance, lower = better)
 ==================================================================
-  Mean  dE  (all)        : 0.25
+  Mean  dE  (all)        : 0.78
   Median dE (all)        : 0.00
-  Mean  dE  (wrong only) : 3.98
-  Median dE (wrong only) : 2.08
-  Max   dE               : 30.96
+  Mean  dE  (wrong only) : 6.41
+  Median dE (wrong only) : 5.39
+  Max   dE               : 55.15
 
-  Within dE <  5  (imperceptible) : 97.9%
-  Within dE < 10  (very close)    : 99.3%
-  Within dE < 20  (acceptable)    : 99.9%
+  Within dE <  5  (imperceptible) : 93.6%
+  Within dE < 10  (very close)    : 97.0%
+  Within dE < 20  (acceptable)    : 99.6%
 
 ==================================================================
 TOP 15 MOST COMMON MISCLASSIFICATIONS
 ==================================================================
-  True: PURPLE_N77C          Predicted: PURPLE_77C           Count:   9   dE: 0.0
-  True: ORANGERED_34C        Predicted: ORANGERED_N34C       Count:   8   dE: 0.0
-  True: ORANGE_25A           Predicted: ORANGE_N25A          Count:   8   dE: 0.0
-  True: ORANGE_25D           Predicted: ORANGE_N25D          Count:   8   dE: 0.0
-  True: PURPLE_77B           Predicted: PURPLE_N77B          Count:   8   dE: 0.0
-  True: BLUEGREEN_111C       Predicted: BLUEGREEN_111B       Count:   7   dE: 0.3
-  True: ORANGERED_N34D       Predicted: ORANGERED_34D        Count:   7   dE: 0.0
-  True: ORANGE_30D           Predicted: ORANGE_N30D          Count:   7   dE: 0.0
-  True: ORANGE_N25C          Predicted: ORANGE_25C           Count:   7   dE: 0.0
-  True: PURPLE_79A           Predicted: PURPLE_N79A          Count:   7   dE: 0.0
-  True: BLUEGREEN_114C       Predicted: BLUEGREEN_114D       Count:   6   dE: 0.0
-  True: ORANGERED_34A        Predicted: ORANGERED_N34A       Count:   6   dE: 0.0
-  True: ORANGERED_34B        Predicted: ORANGERED_N34B       Count:   6   dE: 0.0
-  True: ORANGE_N25B          Predicted: ORANGE_25B           Count:   6   dE: 0.0
-  True: ORANGE_N30A          Predicted: ORANGE_30A           Count:   6   dE: 0.0
+  True: PURPLE_79A             Predicted: PURPLE_N79A            Count:  10   dE: 0.0
+  True: PURPLE_79B             Predicted: PURPLE_N79B            Count:  10   dE: 0.0
+  True: PURPLE_N77A            Predicted: PURPLE_77A             Count:  10   dE: 0.0
+  True: GREYEDYELLOW_161D      Predicted: GREYEDYELLOW_160D      Count:   9   dE: 0.0
+  True: ORANGE_30D             Predicted: ORANGE_N30D            Count:   9   dE: 0.0
+  True: ORANGE_N25D            Predicted: ORANGE_25D             Count:   9   dE: 0.0
+  True: PURPLE_77C             Predicted: PURPLE_N77C            Count:   9   dE: 0.0
+  True: ORANGERED_34B          Predicted: ORANGERED_N34B         Count:   8   dE: 0.0
+  True: ORANGE_25C             Predicted: ORANGE_N25C            Count:   8   dE: 0.0
+  True: ORANGE_25D             Predicted: ORANGE_N25D            Count:   8   dE: 0.0
+  True: ORANGERED_N34B         Predicted: ORANGERED_34B          Count:   7   dE: 0.0
+  True: ORANGE_30C             Predicted: ORANGE_N30C            Count:   7   dE: 0.0
+  True: VIOLETBLUE_92B         Predicted: VIOLETBLUE_N92B        Count:   7   dE: 0.0
+  True: VIOLETBLUE_N92C        Predicted: VIOLETBLUE_92C         Count:   7   dE: 0.0
+  True: BLUEGREEN_111B         Predicted: BLUEGREEN_111C         Count:   6   dE: 0.3
 
 ==================================================================
 OUTPUT FILES  (all saved to report/)

@@ -1,15 +1,14 @@
 """
-run_pipeline.py — Abaca Color AI Pipeline (Quad MLP, 876 classes)
+run_pipeline.py — Abaca Color AI Pipeline (Single MLP, 876 classes)
 
 Changes vs previous version:
 - Updated step order for new real-photo pipeline
 - step1: build_rhs_csv.py     (Builds RHS colors CSV from real photos)
 - step2: process_real_photos.py (NEW — saves real texture swatches)
 - step3: augment_dataset.py
-- step4: train_model.py        (Quad MLP, was Triple MLP)
+- step4: train_model.py        (Single MLP)
 - step5: evaluate.py
 - step6: app.py
-- Added model_mlp_d.joblib to HF upload list
 - Removed rgb_regression_scatter.png (no longer generated)
 - Removed extract_colors.py from HF upload (replaced by build_rhs_csv.py)
 - Added --validate flag to run validate_swatches.py between steps 2 and 3
@@ -26,14 +25,11 @@ Usage:
 import sys, importlib.util
 from pathlib import Path
 
-HF_REPO = "lawrencio/abaca-color-scanner"
+HF_REPO = "lawrencio/abaca-models"   # model files repo
 
 HF_UPLOAD_FILES = [
     # Models
-    "abaca_pipeline/model_mlp_a.joblib",
-    "abaca_pipeline/model_mlp_b.joblib",
-    "abaca_pipeline/model_mlp_c.joblib",
-    "abaca_pipeline/model_mlp_d.joblib",
+    "abaca_pipeline/model_mlp_a.joblib",   # Single MLP only
     "abaca_pipeline/scaler_knn.joblib",
     "abaca_pipeline/label_encoder.joblib",
     "abaca_pipeline/model_config.json",
@@ -120,7 +116,7 @@ if __name__ == "__main__":
         'step1': (base_dir / "build_rhs_csv.py",        "STEP 1: Build RHS colors CSV from real photos"),
         'step2': (base_dir / "process_real_photos.py",  "STEP 2: Extract real texture swatches"),
         'step3': (base_dir / "augment_dataset.py",      "STEP 3: Generate augmented dataset"),
-        'step4': (base_dir / "train_model.py",          "STEP 4: Train Quad MLP ensemble"),
+        'step4': (base_dir / "train_model.py",          "STEP 4: Train Single MLP (mlp_a only)"),
         'step5': (base_dir / "evaluate.py",             "STEP 5: Evaluate model & generate report"),
         'step6': (base_dir / "app.py",                  "STEP 6: Launch scanner"),
         'val':   (base_dir / "validate_swatches.py",    "VALIDATE: Check real texture swatches"),

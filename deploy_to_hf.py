@@ -1,267 +1,434 @@
 """
-deploy_to_hf.py — Deploy new Single MLP to Hugging Face
+deploy_to_hf.py — Abaca Color Scanner Deployment
+==================================================
+
+TWO separate HF repos:
+    MODEL_REPO : lawrencio/abaca-models         — joblib/csv/json model files only
+    SPACE_REPO : lawrencio/abaca-color-scanner  — app code (app.py, templates/, etc.)
+
+WHAT GETS UPLOADED WHERE:
+    abaca-models repo  → abaca_pipeline/ subfolder in repo
+        Only inference files: *.joblib, rhs_colors.csv, model_config.json
+        Excludes everything else: augmented/, backup/, swatches/, *.py, *.png, manifest
+
+    abaca-color-scanner Space → app code only, NO model files
+        app.py, features.py, db.py, segment.py, download_models.py
+        Dockerfile, requirements.txt, sw.js (optional)
+        templates/  — all HTML/CSS/JS
 
 Usage:
-    python deploy_to_hf.py           # deploy everything
-    python deploy_to_hf.py --models  # models only (faster)
-    python deploy_to_hf.py --app     # app files only
-    python deploy_to_hf.py --check   # check what will be uploaded without uploading
+    python deploy_to_hf.py           # deploy app code to Space only (most common)
+    python deploy_to_hf.py --models  # push model files to abaca-models only
+    python deploy_to_hf.py --all     # push both models + app
+    python deploy_to_hf.py --check   # preview what will be uploaded, no upload
 
-What this uploads:
-    MODELS (required for inference):
-        model_mlp_a.joblib      — new single MLP (replaces quad)
-        scaler_knn.joblib       — new scaler
-        label_encoder.joblib    — new label encoder
-        model_config.json       — updated config (model_type: SingleMLP_v1)
-        rhs_colors.csv          — color reference (unchanged)
-
-    APP FILES (code running on HF):
-        app.py                  — updated (mlp_b/c/d optional)
-        features.py             — updated (single model inference)
-        db.py, segment.py       — unchanged
-
-    PIPELINE SCRIPTS:
-        augment_dataset.py      — updated (fiber augmentations, N=300)
-        train_model.py          — updated (single MLP)
-        evaluate.py             — updated (single MLP report)
-        build_rhs_csv.py, process_real_photos.py, run_pipeline.py
-
-    REPORT:
-        report/evaluation_report.txt
-        report/confusion_matrix.png
-        report/delta_e_distribution.png
-        report/model_comparison.png
-        report/color_comparison_grid.png
-        report/per_class_metrics.csv
-
-NOTE: model_mlp_b/c/d.joblib are NOT uploaded.
-      app.py on HF loads them as optional — no crash if missing.
-      The live app will use single MLP automatically.
+After --models or --all: restart the Space so it re-downloads the new model files.
 """
-import sys
+import sys, json
 from pathlib import Path
 
-HF_REPO = "lawrencio/abaca-color-scanner"
+MODEL_REPO   = "lawrencio/abaca-models"
+SPACE_REPO   = "lawrencio/abaca-color-scanner"
+PIPELINE_DIR = Path("abaca_pipeline")
 
-# ── File lists ────────────────────────────────────────────────────────────────
-
-MODEL_FILES = [
-    # Core — required
-    "abaca_pipeline/model_mlp_a.joblib",
-    "abaca_pipeline/scaler_knn.joblib",
-    "abaca_pipeline/label_encoder.joblib",
-    "abaca_pipeline/model_config.json",
-    "abaca_pipeline/rhs_colors.csv",
-    # NOTE: b/c/d intentionally excluded — app.py handles their absence
+# ── EXACTLY these 5 files go to the model repo — nothing else ────────────────
+# Single MLP — only mlp_a. b/c/d are old Quad ensemble files, not needed.
+MODEL_INFERENCE_FILES = [
+    "model_mlp_a.joblib",
+    "scaler_knn.joblib",
+    "label_encoder.joblib",
+    "model_config.json",
+    "rhs_colors.csv",
 ]
 
-APP_FILES = [
+# ── Required app files → Space repo ──────────────────────────────────────────
+SPACE_APP_FILES = [
     "app.py",
     "features.py",
     "db.py",
     "segment.py",
+    "download_models.py",
+    "Dockerfile",
+    "requirements.txt",
 ]
 
-PIPELINE_FILES = [
-    "augment_dataset.py",
-    "train_model.py",
-    "evaluate.py",
-    "build_rhs_csv.py",
-    "process_real_photos.py",
-    "run_pipeline.py",
-    "deploy_to_hf.py",
+# ── Optional app files (only uploaded if they exist) ─────────────────────────
+SPACE_OPTIONAL_FILES = [
+    "sw.js",
 ]
 
-REPORT_FILES = [
-    "report/evaluation_report.txt",
-    "report/confusion_matrix.png",
-    "report/delta_e_distribution.png",
-    "report/model_comparison.png",
-    "report/color_comparison_grid.png",
-    "report/per_class_metrics.csv",
-]
 
-ALL_FILES = MODEL_FILES + APP_FILES + PIPELINE_FILES + REPORT_FILES
-
-
-def check_files():
-    """Check which files exist and which are missing before uploading."""
-    base_dir = Path(__file__).parent
-    print(f"\n{'='*65}")
-    print(f"  PRE-DEPLOY CHECK")
-    print(f"{'='*65}")
-
-    missing_critical = []
-    missing_optional = []
-    ready = []
-
-    critical = set(MODEL_FILES + APP_FILES)
-
-    for rel_path in ALL_FILES:
-        local = base_dir / rel_path
-        if local.exists():
-            size_mb = local.stat().st_size / 1e6
-            ready.append((rel_path, size_mb))
-        elif rel_path in critical:
-            missing_critical.append(rel_path)
-        else:
-            missing_optional.append(rel_path)
-
-    print(f"\n  ✅ Ready to upload ({len(ready)} files):")
-    for rel_path, size_mb in ready:
-        print(f"     {rel_path:<55} ({size_mb:.1f} MB)")
-
-    if missing_critical:
-        print(f"\n  ❌ MISSING CRITICAL ({len(missing_critical)} files) — fix before deploying:")
-        for f in missing_critical:
-            print(f"     {f}")
-
-    if missing_optional:
-        print(f"\n  ⚠️  Missing optional ({len(missing_optional)} files) — will be skipped:")
-        for f in missing_optional:
-            print(f"     {f}")
-
-    # Verify model_config shows SingleMLP
-    config_path = base_dir / "abaca_pipeline/model_config.json"
-    if config_path.exists():
-        import json
-        with open(config_path) as f:
-            cfg = json.load(f)
-        model_type = cfg.get('model_type', 'unknown')
-        val_acc    = cfg.get('mlp_a_val_accuracy', 'unknown')
-        arch       = cfg.get('mlp_a_architecture', 'unknown')
-        print(f"\n  Model info:")
-        print(f"     Type         : {model_type}")
-        print(f"     Architecture : {arch}")
-        print(f"     Val accuracy : {val_acc}%")
-        if model_type == 'SingleMLP_v1':
-            print(f"     Status       : ✅ New single MLP — ready to deploy")
-        else:
-            print(f"     Status       : ⚠️  Still showing old model type — did training finish?")
-
-    print(f"\n{'='*65}")
-    return len(missing_critical) == 0
+def get_template_files(base_dir: Path) -> list:
+    """Auto-discover all files in templates/ folder."""
+    templates_dir = base_dir / "templates"
+    if not templates_dir.exists():
+        return []
+    return [
+        str(p.relative_to(base_dir)).replace("\\", "/")
+        for p in sorted(templates_dir.rglob("*"))
+        if p.is_file()
+    ]
 
 
-def deploy(file_list, label):
-    """Upload a list of files to HuggingFace."""
+def human_size(path: Path) -> str:
+    size = path.stat().st_size
+    if size >= 1_000_000_000: return f"{size/1e9:.2f} GB"
+    if size >= 1_000_000:     return f"{size/1e6:.1f} MB"
+    return f"{size/1000:.0f} KB"
+
+
+def login_check() -> bool:
+    """
+    Auth priority:
+      1. HF_TOKEN environment variable  (export HF_TOKEN=hf_...)
+      2. huggingface-cli login cache     (huggingface-cli login)
+    No --token flag needed if either is set.
+    """
+    import os
     try:
         from huggingface_hub import HfApi
+        token = os.environ.get("HF_TOKEN")
+        api   = HfApi(token=token) if token else HfApi()
+        user  = api.whoami()
+        src   = "HF_TOKEN env var" if token else "huggingface-cli login cache"
+        print(f"✅  Logged in as: {user['name']}  (via {src})")
+        return True
+    except ImportError:
+        print("❌  huggingface_hub not installed. Run: pip install huggingface_hub")
+        return False
+    except Exception:
+        print("❌  Not authenticated. Choose one:")
+        print("    Option 1 (recommended): export HF_TOKEN=hf_...")
+        print("    Option 2: huggingface-cli login")
+        return False
+
+def check_files(base_dir: Path) -> bool:
+    sep = "=" * 65
+    print(f"\n{sep}")
+    print(f"  PRE-DEPLOY CHECK")
+    print(f"{sep}")
+
+    all_ok = True
+
+    # Model config info
+    config_path = base_dir / PIPELINE_DIR / "model_config.json"
+    if config_path.exists():
+        with open(config_path) as f:
+            cfg = json.load(f)
+        print(f"\n  Model info:")
+        print(f"    Type     : {cfg.get('model_type', '?')}")
+        print(f"    Classes  : {cfg.get('n_classes', '?')}")
+        print(f"    Val acc  : {cfg.get('mlp_a_val_accuracy', '?')}%")
+    else:
+        print(f"\n  ⚠️  model_config.json not found in {PIPELINE_DIR}/")
+
+    # ── Model files check ─────────────────────────────────────────────────────
+    print(f"\n  → MODEL REPO: {MODEL_REPO}")
+    print(f"    Destination in repo: abaca_pipeline/")
+    print(f"    Files:")
+    missing_models = []
+    for fname in MODEL_INFERENCE_FILES:
+        p = base_dir / PIPELINE_DIR / fname
+        if p.exists():
+            print(f"      ✅  {fname:<40} {human_size(p)}")
+        else:
+            print(f"      ❌  {fname:<40} ← MISSING")
+            missing_models.append(fname)
+            all_ok = False
+
+    if missing_models:
+        print(f"\n    ❌ {len(missing_models)} model file(s) missing")
+
+    # ── Space files check ─────────────────────────────────────────────────────
+    print(f"\n  → SPACE REPO: {SPACE_REPO}")
+    print(f"    Required files:")
+    for f in SPACE_APP_FILES:
+        p = base_dir / f
+        if p.exists():
+            print(f"      ✅  {f:<40} {human_size(p)}")
+        else:
+            print(f"      ❌  {f:<40} ← MISSING")
+            all_ok = False
+
+    print(f"    Optional files:")
+    for f in SPACE_OPTIONAL_FILES:
+        p = base_dir / f
+        if p.exists():
+            print(f"      ✅  {f}")
+        else:
+            print(f"      ⚠️  {f}  (not found — will skip)")
+
+    templates = get_template_files(base_dir)
+    print(f"    Templates: {len(templates)} files in templates/")
+    if not templates:
+        print(f"      ⚠️  templates/ folder not found")
+
+    print(f"\n{sep}")
+    if all_ok:
+        print(f"  ✅  All required files present — safe to deploy")
+    else:
+        print(f"  ❌  Fix missing files before deploying")
+    print(f"{sep}\n")
+    return all_ok
+
+
+# ── UPLOAD MODELS ─────────────────────────────────────────────────────────────
+def upload_model_files(base_dir: Path) -> bool:
+    """
+    Upload ONLY the 5 inference files to lawrencio/abaca-models
+    under abaca_pipeline/ subfolder in the repo.
+
+    Repo structure after upload:
+        abaca_pipeline/
+            model_mlp_a.joblib   ← Single MLP (only this one)
+            scaler_knn.joblib
+            label_encoder.joblib
+            model_config.json
+            rhs_colors.csv
+    """
+    try:
+        from huggingface_hub import HfApi
+        api = HfApi()
     except ImportError:
         print("❌  huggingface_hub not installed.")
-        print("    Run: pip install huggingface_hub")
         return False
 
-    try:
-        api  = HfApi()
-        user = api.whoami()
-        print(f"✅  Logged in as: {user['name']}")
-    except Exception:
-        print("❌  Not logged in to Hugging Face.")
-        print("    Run: huggingface-cli login")
+    files_to_upload = []
+    for fname in MODEL_INFERENCE_FILES:
+        p = base_dir / PIPELINE_DIR / fname
+        if p.exists():
+            files_to_upload.append((p, f"abaca_pipeline/{fname}"))
+        else:
+            print(f"  ⚠️  Skip (not found): {fname}")
+
+    if not files_to_upload:
+        print("❌  No model files found — aborting.")
         return False
 
-    try:
-        api.create_repo(repo_id=HF_REPO, exist_ok=True, repo_type="model")
-        print(f"✅  Repo: https://huggingface.co/{HF_REPO}")
-    except Exception as e:
-        print(f"⚠️  Repo warning: {e}")
+    print(f"\nUploading {len(files_to_upload)} model files → {MODEL_REPO}/abaca_pipeline/\n")
 
-    base_dir = Path(__file__).parent
-    uploaded, skipped, failed = 0, 0, []
-
-    print(f"\nUploading {label} ({len(file_list)} files) ...")
-    for rel_path in file_list:
-        local_path = base_dir / rel_path
-        if not local_path.exists():
-            print(f"  ⚠️  Skip  : {rel_path}")
-            skipped += 1
-            continue
+    success, failed = 0, []
+    for local_path, repo_path in files_to_upload:
+        print(f"  ⬆️  {repo_path:<55} ({human_size(local_path)}) ...", end=" ", flush=True)
         try:
             api.upload_file(
                 path_or_fileobj=str(local_path),
-                path_in_repo=rel_path,
-                repo_id=HF_REPO,
+                path_in_repo=repo_path,
+                repo_id=MODEL_REPO,
                 repo_type="model",
+                commit_message=f"Update: {local_path.name}",
             )
-            size_mb = local_path.stat().st_size / 1e6
-            print(f"  ✅  {rel_path:<55} ({size_mb:.1f} MB)")
-            uploaded += 1
+            print("✅")
+            success += 1
         except Exception as e:
-            print(f"  ❌  Failed : {rel_path} — {e}")
-            failed.append(rel_path)
+            err = str(e)
+            if "No files have been modified" in err:
+                print("ℹ️  Already up to date")
+                success += 1
+            else:
+                print(f"❌  {e}")
+                failed.append(repo_path)
 
-    print(f"\n  Uploaded : {uploaded}")
-    print(f"  Skipped  : {skipped}")
-    print(f"  Failed   : {len(failed)}")
-
+    print(f"\n  Uploaded: {success}/{len(files_to_upload)}", end="")
     if failed:
-        print(f"\n  Failed files:")
+        print(f"  |  Failed: {len(failed)}")
         for f in failed:
-            print(f"    {f}")
-
+            print(f"    ❌ {f}")
+    else:
+        print()
     return len(failed) == 0
 
 
+# ── UPLOAD SPACE ──────────────────────────────────────────────────────────────
+def upload_space_files(base_dir: Path) -> bool:
+    """
+    Upload app code to the Space repo.
+    NEVER uploads model files — those stay in abaca-models repo.
+    """
+    try:
+        from huggingface_hub import HfApi
+        api = HfApi()
+    except ImportError:
+        print("❌  huggingface_hub not installed.")
+        return False
+
+    all_files = list(SPACE_APP_FILES)
+    for f in SPACE_OPTIONAL_FILES:
+        if (base_dir / f).exists():
+            all_files.append(f)
+    all_files += get_template_files(base_dir)
+
+    # Safety guard: never let model files sneak into the Space repo
+    model_fnames = set(MODEL_INFERENCE_FILES)
+    all_files = [f for f in all_files if Path(f).name not in model_fnames]
+
+    print(f"\nUploading {len(all_files)} app files → {SPACE_REPO}\n")
+
+    success, skipped, failed = 0, 0, []
+    for rel_path in all_files:
+        local_path = base_dir / rel_path
+        if not local_path.exists():
+            print(f"  ⚠️  Skip (not found): {rel_path}")
+            skipped += 1
+            continue
+        print(f"  ⬆️  {rel_path:<55} ({human_size(local_path)}) ...", end=" ", flush=True)
+        try:
+            api.upload_file(
+                path_or_fileobj=str(local_path),
+                path_in_repo=rel_path.replace("\\", "/"),
+                repo_id=SPACE_REPO,
+                repo_type="space",
+                commit_message=f"Deploy: {Path(rel_path).name}",
+            )
+            print("✅")
+            success += 1
+        except Exception as e:
+            err = str(e)
+            if "No files have been modified" in err:
+                print("ℹ️  No change")
+                success += 1
+            else:
+                print(f"❌  {e}")
+                failed.append(rel_path)
+
+    print(f"\n  Uploaded: {success}  |  Skipped: {skipped}  |  Failed: {len(failed)}")
+    if failed:
+        for f in failed:
+            print(f"    ❌ {f}")
+    return len(failed) == 0
+
+
+# ── SINGLE FILE UPLOAD ────────────────────────────────────────────────────────
+def upload_single_files(base_dir: Path, files: list) -> bool:
+    """
+    Upload specific files by name.
+    Auto-detects destination repo:
+      - Model files (*.joblib, rhs_colors.csv, model_config.json) → MODEL_REPO
+      - Everything else → SPACE_REPO
+    """
+    import os
+    from huggingface_hub import HfApi
+    token = os.environ.get("HF_TOKEN")
+    api   = HfApi(token=token) if token else HfApi()
+
+    model_names = set(MODEL_INFERENCE_FILES)
+    success, failed = 0, []
+
+    for fname in files:
+        local_path = base_dir / fname
+        if not local_path.exists():
+            print(f"  ❌  {fname} — file not found locally")
+            failed.append(fname)
+            continue
+
+        # Auto-detect destination
+        basename = Path(fname).name
+        is_model = (
+            basename in model_names or
+            basename.endswith(".joblib") or
+            basename in ("rhs_colors.csv", "model_config.json")
+        )
+
+        if is_model:
+            repo_id   = MODEL_REPO
+            repo_type = "model"
+            repo_path = f"abaca_pipeline/{basename}"
+        else:
+            repo_id   = SPACE_REPO
+            repo_type = "space"
+            repo_path = str(Path(fname)).replace("\\", "/")
+
+        print(f"  ⬆️  {fname:<45} → {repo_id}/{repo_path} ...", end=" ", flush=True)
+        try:
+            api.upload_file(
+                path_or_fileobj=str(local_path),
+                path_in_repo=repo_path,
+                repo_id=repo_id,
+                repo_type=repo_type,
+                commit_message=f"Update: {basename}",
+            )
+            print(f"✅  ({human_size(local_path)})")
+            success += 1
+        except Exception as e:
+            err = str(e)
+            if "No files have been modified" in err:
+                print("ℹ️  No change")
+                success += 1
+            else:
+                print(f"❌  {e}")
+                failed.append(fname)
+
+    print(f"\n  Done: {success} uploaded, {len(failed)} failed")
+    return len(failed) == 0
+
+
+# ── MAIN ──────────────────────────────────────────────────────────────────────
 def main():
-    args = sys.argv[1:]
+    args     = sys.argv[1:]
+    base_dir = Path(__file__).parent
 
     print(f"\n{'='*65}")
-    print(f"  DEPLOY TO HUGGING FACE")
-    print(f"  Repo: {HF_REPO}")
+    print(f"  ABACA SCANNER — DEPLOY TO HUGGING FACE")
+    print(f"  Model repo : {MODEL_REPO}")
+    print(f"  Space repo : {SPACE_REPO}")
     print(f"{'='*65}")
 
-    # --check: just show what would be uploaded
-    if '--check' in args:
-        check_files()
+    if "--check" in args:
+        check_files(base_dir)
         return
 
-    # Always run check first
-    ok = check_files()
-    if not ok:
-        print("\n❌  Critical files missing. Fix them before deploying.")
-        print("    Make sure train_model.py finished successfully.")
-        return
-
-    print()
-
-    if '--models' in args:
-        # Models only
-        ok = deploy(MODEL_FILES, "MODELS")
-
-    elif '--app' in args:
-        # App code only
-        ok = deploy(APP_FILES, "APP FILES")
-
-    else:
-        # Full deploy — models first, then app, then pipeline, then report
-        print("[1/4] Uploading models ...")
-        ok = deploy(MODEL_FILES, "models")
-        if not ok:
-            print("\n❌  Model upload failed. Check errors above.")
+    # ── --files: upload specific files ────────────────────────────────────────
+    if "--files" in args:
+        idx = args.index("--files")
+        files = [a for a in args[idx+1:] if not a.startswith("--")]
+        if not files:
+            print("❌  --files requires at least one filename.")
+            print("    Example: python deploy_to_hf.py --files app.py features.py")
+            print("    Example: python deploy_to_hf.py --files abaca_pipeline/label_encoder.joblib")
             return
+        if not login_check():
+            return
+        print(f"\n  Uploading {len(files)} specific file(s) ...\n")
+        upload_single_files(base_dir, files)
+        print(f"\n{'='*65}\n")
+        return
 
-        print("\n[2/4] Uploading app files ...")
-        deploy(APP_FILES, "app files")
+    if not check_files(base_dir):
+        print("❌  Fix missing files before deploying.")
+        return
 
-        print("\n[3/4] Uploading pipeline scripts ...")
-        deploy(PIPELINE_FILES, "pipeline scripts")
+    if not login_check():
+        return
 
-        print("\n[4/4] Uploading report ...")
-        deploy(REPORT_FILES, "report")
+    do_models = "--models" in args or "--all" in args
+    # Default (no flags) = app only
+    do_app = "--app" in args or "--all" in args or (
+        "--models" not in args and "--all" not in args
+    )
+
+    if do_models:
+        print("\n[1] Uploading model files → abaca-models repo ...")
+        ok = upload_model_files(base_dir)
+        if not ok:
+            print("\n❌  Model upload had failures.")
+
+    if do_app:
+        label = "[2]" if do_models else "[1]"
+        print(f"\n{label} Uploading app code → Space repo ...")
+        upload_space_files(base_dir)
 
     print(f"\n{'='*65}")
     print(f"  DEPLOY COMPLETE")
-    print(f"  Live app: https://huggingface.co/spaces/{HF_REPO.replace('/', '/')}")
     print(f"{'='*65}")
-    print()
-    print("  The live app will now use Single MLP automatically.")
-    print("  model_mlp_b/c/d are not uploaded — app.py handles this gracefully.")
-    print()
-    print("  To verify the live app is using the new model:")
-    print("  1. Open the HF Space URL above")
-    print("  2. Log in and go to Settings → it should show SingleMLP_v1")
-    print()
+
+    if do_models:
+        print(f"\n  ⚠️  Restart the Space to pull the new models:")
+        print(f"  https://huggingface.co/spaces/{SPACE_REPO} → Settings → Restart Space")
+    else:
+        print(f"\n  Space will restart automatically (~90 seconds).")
+        print(f"  https://lawrencio-abaca-color-scanner.hf.space")
+
+    print(f"{'='*65}\n")
 
 
 if __name__ == "__main__":
